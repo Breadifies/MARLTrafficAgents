@@ -13,17 +13,14 @@ class VehicleAgent:
         self.turning_anchor_y = height // 2 
         self.center_anchor_x = width // 2 #anchor for center
         self.center_anchor_y = height // 2
-        self.shape.anchor_x = self.turning_anchor_x
-        self.shape.anchor_y = self.turning_anchor_y
         self.deg_angle = 0
         self.car_angle = math.radians(self.deg_angle)
 
         self.vision_length = 2*width
-
+        self.shape.anchor_position = self.turning_anchor_x, self.turning_anchor_y
         self.front_vehicle = shapes.Line(x, y, x + math.cos(self.car_angle) * self.vision_length, y + math.sin(self.car_angle) * self.vision_length, width=1, color=(255, 0, 0), batch=batch2)
         self.left_vehicle = shapes.Line(x, y, x + math.cos(self.car_angle + math.radians(45)) * self.vision_length, y + math.sin(self.car_angle + math.radians(45)) * self.vision_length, width=1, color=(255, 0, 0), batch=batch2)
         self.right_vehicle = shapes.Line(x, y, x + math.cos(self.car_angle - math.radians(45)) * self.vision_length, y + math.sin(self.car_angle - math.radians(45)) * self.vision_length, width=1, color=(255, 0, 0), batch=batch2)
-        self.shape.anchor_position = self.turning_anchor_x, self.turning_anchor_y
 
         self.velocity = 0
         self.turning_speed = 0 #degree of turning for vehicle
@@ -38,6 +35,15 @@ class VehicleAgent:
         self.current_direction = self.getDirection()
 
     def changeAnchor(self, anchor_x, anchor_y):
+        # Calculate the difference in anchor position
+        dx = anchor_x - self.shape.anchor_x
+        dy = anchor_y - self.shape.anchor_y
+        rotated_dx = dx * math.cos(self.car_angle) - dy * math.sin(self.car_angle)
+        rotated_dy = dx * math.sin(self.car_angle) + dy * math.cos(self.car_angle)
+        # Update the shape's position to account for the new anchor
+        self.shape.x += rotated_dx
+        self.shape.y += rotated_dy
+        # Update the anchor position
         self.shape.anchor_x = anchor_x
         self.shape.anchor_y = anchor_y
 
@@ -54,28 +60,24 @@ class RoadTile:
         self.road_line = shapes.Line(start_x, start_y, end_x, end_y, width, color, batch=batch)
 
     def is_on_road(self, object): #check whether the ANCHOR of a shape is inside the road, if yes then return true
-        def point_to_segment_distance(px, py, x1, y1, x2, y2):
-            line_vec = np.array([x2 - x1, y2 - y1])
-            point_vec = np.array([px - x1, py - y1])
-            line_len = np.linalg.norm(line_vec)
-            line_unitvec = line_vec / line_len
-            point_vec_scaled = point_vec / line_len
-            t = np.dot(line_unitvec, point_vec_scaled)
-            t = np.clip(t, 0, 1)
-            nearest = np.array([x1, y1]) + t * line_vec
-            distance = np.linalg.norm(np.array([px, py]) - nearest)
-            return distance
+
+
+        # def point_to_segment_distance(px, py, x1, y1, x2, y2):
+        #     line_vec = np.array([x2 - x1, y2 - y1])
+        #     point_vec = np.array([px - x1, py - y1])
+        #     line_len = np.linalg.norm(line_vec)
+        #     line_unitvec = line_vec / line_len
+        #     point_vec_scaled = point_vec / line_len
+        #     t = np.dot(line_unitvec, point_vec_scaled)
+        #     t = np.clip(t, 0, 1)
+        #     nearest = np.array([x1, y1]) + t * line_vec
+        #     distance = np.linalg.norm(np.array([px, py]) - nearest)
+        #     return distance
         
-        distance = point_to_segment_distance(object.shape.x, object.shape.y, self.start_x, self.start_y, self.end_x, self.end_y)
-        return distance <= self.width / 2 #distance from object to road line
+        # distance = point_to_segment_distance(object.shape.x, object.shape.y, self.start_x, self.start_y, self.end_x, self.end_y)
+        # return distance <= self.width / 2 #distance from object to road line
+        return object in self.road_line
 
 
 
 
-        road_min_x = min(self.start_x, self.end_x)
-        road_max_x = max(self.start_x, self.end_x)
-        road_min_y = min(self.start_y, self.end_y)
-        road_max_y = max(self.start_y, self.end_y)
-        print("road_min_x: ", road_min_x, "road_max_x: ", road_max_x, "road_min_y: ", road_min_y, "road_max_y: ", road_max_y)
-        print("object.shape.x: ", object.shape.x, "object.shape.y: ", object.shape.y)
-        return (road_min_x <= object.shape.x <= road_max_x) and (road_min_y <= object.shape.y <= road_max_y)

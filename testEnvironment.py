@@ -7,7 +7,7 @@ from pyglet import gl #graphics drawing done via GPU than CPU, more optimised
 from vehicle_Agent import VehicleAgent, RoadTile
 
 
-window = pyglet.window.Window(vsync=True) #vysnc, eliminate unecessary variables
+window = pyglet.window.Window(width=1568, height=882, vsync=True)  # vsync, eliminate unnecessary variables
 
 WINDOW_WIDTH, WINDOW_HEIGHT = window.get_size()
 
@@ -38,15 +38,21 @@ def on_key_release(symbol, modifiers):
         keys_pressed[3] = 0
 
 
-#/////////////////////////////////////////////////////////////////////////////////////////#/////////////////////////////////////////////////////////////////////////////////////////    
-acceleration = 300
-turning_accel = 500
-friction = 500
-turning_friction = 2500
-# Create vehicle agents in an iterable -> loop through these in updates
+#/////////////////////////////////////////////////////////////////////////////////////////#/////////////////////////////////////////////////////////////////////////////////////////  
+# //CONVERSION OF REAL-WORLD UNITS to SIMULATION UNITS  (meters, km/h to pixels/frame)
+MU = 16 #1 meter = n pixels (based on vehicle width) (METER UNIT)
+TOP_SPEED = MU*15 #48km/h  pixels per second
+TOP_TURNING_SPEED = MU*13
+ACCELERATION = MU * 20
+TURNING_ACCEL = MU * 15 #assume turning acceleration of 5m/s
+FRICTION = MU * 10 #FRICTION coefficient
+TURNING_FRICTION = MU * 20 #how quickly rotation stops
+CAR_LENGTH = MU*4.2 #4.2 meters, pixel per meter 21:9 ratio standard
+CAR_WIDTH = MU*1.8  #= 1.8 meters to pixels is 24, therfore 1 meter = 13.33 pixels
+
 vAgents = [
-    VehicleAgent(x=450, y=450, width=42, height=30, color=(200, 225, 90), batch1=batch, batch2=batch2, isControlled=True),
-    # VehicleAgent(x=300, y=450, width=42, height=30, color=(50, 225, 30), batch1=batch, batch2=batch2),
+    VehicleAgent(x=450, y=450, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2, isControlled=True),
+    VehicleAgent(x=300, y=450, width=CAR_LENGTH, height=CAR_WIDTH, color=(50, 225, 30), batch1=batch, batch2=batch2)
     # VehicleAgent(x=120, y=450, width=38, height=25, color=(214, 125, 67), batch1=batch, batch2=batch2),
     # VehicleAgent(x=400, y=450, width=42, height=30, color=(50, 225, 30), batch1=batch, batch2=batch2),
     # VehicleAgent(x=300, y=450, width=42, height=30, color=(50, 225, 30), batch1=batch, batch2=batch2),
@@ -57,7 +63,7 @@ vAgents = [
     # VehicleAgent(x=250, y=430, width=41, height=29, color=(0, 0, 255), batch1=batch, batch2=batch2)
 ]
 #/////////////////////////////////////////////////////////////////////////////////////////#////////////////////////////////////////////////////////////////////////////////////////       
-ROAD_WIDTH = 80
+ROAD_WIDTH = CAR_WIDTH * 2 #should be roughly DOUBLE a saloon width
 roads = []
 road = RoadTile(start_x=(WINDOW_WIDTH*0.1), start_y=WINDOW_HEIGHT/2, end_x=(WINDOW_WIDTH*0.9), end_y=WINDOW_HEIGHT/2, width=ROAD_WIDTH, color=(50, 50, 50), batch=roadBatch)
 roads.append(road)
@@ -65,30 +71,34 @@ roads.append(road)
 
 #dt is the time elapsed since last call
 def update(dt): #ensuring consistent framerate and game logic to be frame-rate indepependent
-    global acceleration, turning_accel, keys_pressed, turning_friction, friction
-
+    
+    global keys_pressed, ACCELERATION, TURNING_ACCEL, FRICTION, TURNING_FRICTION
+    print(keys_pressed)
     for a in vAgents: #looping through every vehicle agent
         left, right, down, up = a.current_direction
         if left:
-            a.turning_speed += turning_accel * dt
+            a.turning_speed += TURNING_ACCEL * dt
         if right:
-            a.turning_speed -= turning_accel * dt 
-        if up:
-            a.velocity += acceleration * dt 
-        if down:
-            a.velocity -= acceleration * dt 
+            a.turning_speed -= TURNING_ACCEL * dt
 
-        #friction when no key pressed
+        if up:
+            a.velocity += ACCELERATION * dt 
+            a.velocity -= FRICTION * dt 
+        if down:
+            a.velocity -= ACCELERATION * dt 
+            a.velocity += FRICTION * dt  
+
+        #FRICTION
         if not up and not down:
             if a.velocity > 0:
-                a.velocity -= friction * dt     
+                a.velocity -= FRICTION * dt     
             elif a.velocity < 0:
-                a.velocity += friction * dt 
+                a.velocity += FRICTION * dt 
         if not right and not left:
             if a.turning_speed > 0:
-                a.turning_speed -= turning_friction * dt 
+                a.turning_speed -= TURNING_FRICTION * dt 
             elif a.turning_speed < 0:
-                a.turning_speed += turning_friction * dt 
+                a.turning_speed += TURNING_FRICTION * dt 
         #rotate and translate the vehicle
         a.car_angle = math.radians(a.deg_angle)
         a.shape.x += a.velocity * dt * math.cos(a.car_angle) 
@@ -96,33 +106,33 @@ def update(dt): #ensuring consistent framerate and game logic to be frame-rate i
         a.deg_angle += a.turning_speed * dt
         a.shape.rotation = -a.deg_angle
 
-        #rotate and translate the vision lines
-        a.changeAnchor(a.center_anchor_x, a.center_anchor_y)#center anchor position temporarily
-        print("ANCHOR BEFORE: ", a.shape.anchor_position, a.shape.position)
-
-        a.front_vehicle.x = a.left_vehicle.x = a.right_vehicle.x = a.shape.x
-        a.front_vehicle.y = a.left_vehicle.y = a.right_vehicle.y = a.shape.y
-        print("CHECKING front vehicle a: ", a.front_vehicle.position)
-        a.front_vehicle.rotation = a.left_vehicle.rotation = a.right_vehicle.rotation = -a.deg_angle
         if a.shape.x >= window.width or a.shape.x <= 0:
             a.velocity = -a.velocity+10
         if a.shape.y >= window.height or a.shape.y <= 0:
             a.velocity = -a.velocity+10
-            
-        if abs(a.velocity) > 500: #clamp top speed (max drag)
-            a.velocity = 500*np.sign(a.velocity)
-        if abs(a.turning_speed) > 300:
-           a.turning_speed = 300*np.sign(a.turning_speed)
-        # Check if the vehicle is on the road
-        if road.is_on_road(a): #not in road
-            a.shape.color = (255, 0, 0)  # Stop the vehicle if it's off the road
-        else:
-            a.shape.color = (50, 225, 30)
 
-        
+        if abs(a.velocity) < 0.1: #clamp minimum speed
+            a.velocity = 0
+        if abs(a.turning_speed) < 0.1:
+            a.turning_speed = 0
+        if abs(a.velocity) > TOP_SPEED: #clamp top speed (max drag)
+            a.velocity = TOP_SPEED*np.sign(a.velocity)
+        if abs(a.turning_speed) > TOP_TURNING_SPEED: #clamp top turning speed
+           a.turning_speed = TOP_TURNING_SPEED*np.sign(a.turning_speed)
+
+        # Check if the vehicle is on the road
+        a.changeAnchor(a.center_anchor_x, a.center_anchor_y) #center anchor position temporarily
+        for road in roads:
+            if road.is_on_road(a.shape.position): #not in road
+                a.shape.color = (255, 0, 0)  # Stop the vehicle if it's off the road
+            else:
+                a.shape.color = (50, 225, 30)
+
+        #rotate and translate the vision lines
+        a.front_vehicle.x = a.left_vehicle.x = a.right_vehicle.x = a.shape.x
+        a.front_vehicle.y = a.left_vehicle.y = a.right_vehicle.y = a.shape.y
+        a.front_vehicle.rotation = a.left_vehicle.rotation = a.right_vehicle.rotation = -a.deg_angle
         a.changeAnchor(a.turning_anchor_x, a.turning_anchor_y)
-        print("ANCHOR AFTER: ", a.shape.anchor_position, a.shape.position)
-        print("CHECKING front vehicle a AFTER: ", a.front_vehicle.position)
 
 def update_direction(dt): #operates on longer timesteps than animation update
     for a in vAgents:
