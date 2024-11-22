@@ -7,10 +7,10 @@ from pyglet import gl #graphics drawing done via GPU than CPU, more optimised
 from vehicle_Agent import VehicleAgent, RoadTile
 
 
+
+
 window = pyglet.window.Window(width=1568, height=882, vsync=True)  # vsync, eliminate unnecessary variables
-
 WINDOW_WIDTH, WINDOW_HEIGHT = window.get_size()
-
 batch = pyglet.graphics.Batch()
 batch2 = pyglet.graphics.Batch()
 roadBatch = pyglet.graphics.Batch()
@@ -43,16 +43,17 @@ def on_key_release(symbol, modifiers):
 MU = 16 #1 meter = n pixels (based on vehicle width) (METER UNIT)
 TOP_SPEED = MU*15 #48km/h  pixels per second
 TOP_TURNING_SPEED = MU*13
-ACCELERATION = MU * 20
+ACCELERATION = MU * 5
+DECELERATION = ACCELERATION * 3
 TURNING_ACCEL = MU * 15 #assume turning acceleration of 5m/s
-FRICTION = MU * 10 #FRICTION coefficient
+FRICTION = MU * 3 #FRICTION coefficient
 TURNING_FRICTION = MU * 20 #how quickly rotation stops
 CAR_LENGTH = MU*4.2 #4.2 meters, pixel per meter 21:9 ratio standard
 CAR_WIDTH = MU*1.8  #= 1.8 meters to pixels is 24, therfore 1 meter = 13.33 pixels
 
 vAgents = [
     VehicleAgent(x=450, y=450, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2, isControlled=True),
-    VehicleAgent(x=300, y=450, width=CAR_LENGTH, height=CAR_WIDTH, color=(50, 225, 30), batch1=batch, batch2=batch2)
+    # VehicleAgent(x=300, y=450, width=CAR_LENGTH, height=CAR_WIDTH, color=(50, 225, 30), batch1=batch, batch2=batch2)
     # VehicleAgent(x=120, y=450, width=38, height=25, color=(214, 125, 67), batch1=batch, batch2=batch2),
     # VehicleAgent(x=400, y=450, width=42, height=30, color=(50, 225, 30), batch1=batch, batch2=batch2),
     # VehicleAgent(x=300, y=450, width=42, height=30, color=(50, 225, 30), batch1=batch, batch2=batch2),
@@ -60,7 +61,30 @@ vAgents = [
     # VehicleAgent(x=500, y=400, width=45, height=32, color=(100, 150, 200), batch1=batch, batch2=batch2),
     # VehicleAgent(x=200, y=400, width=40, height=28, color=(255, 0, 0), batch1=batch, batch2=batch2),
     # VehicleAgent(x=350, y=420, width=44, height=31, color=(0, 255, 0), batch1=batch, batch2=batch2),
-    # VehicleAgent(x=250, y=430, width=41, height=29, color=(0, 0, 255), batch1=batch, batch2=batch2)
+    # VehicleAgent(x=250, y=430, width=41, height=29, color=(0, 0, 255), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=100, y=460, width=39, height=26, color=(255, 255, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=450, y=410, width=43, height=29, color=(0, 255, 255), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=150, y=470, width=37, height=24, color=(255, 0, 255), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=320, y=440, width=46, height=33, color=(128, 128, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=220, y=460, width=40, height=27, color=(128, 0, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=370, y=430, width=42, height=28, color=(0, 128, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=270, y=450, width=44, height=30, color=(0, 0, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=180, y=480, width=41, height=29, color=(128, 128, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=420, y=420, width=45, height=31, color=(0, 128, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=320, y=460, width=43, height=28, color=(128, 0, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=370, y=440, width=46, height=33, color=(128, 128, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=270, y=460, width=40, height=27, color=(128, 0, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=220, y=430, width=42, height=28, color=(0, 128, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=170, y=450, width=44, height=30, color=(0, 0, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=420, y=480, width=41, height=29, color=(128, 128, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=320, y=420, width=45, height=31, color=(0, 128, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=370, y=460, width=43, height=28, color=(128, 0, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=270, y=440, width=46, height=33, color=(128, 128, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=220, y=460, width=40, height=27, color=(128, 0, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=170, y=430, width=42, height=28, color=(0, 128, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=420, y=450, width=44, height=30, color=(0, 0, 128), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=320, y=480, width=41, height=29, color=(128, 128, 0), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=370, y=420, width=45, height=31, color=(0, 128, 128), batch1=batch, batch2=batch2)
 ]
 #/////////////////////////////////////////////////////////////////////////////////////////#////////////////////////////////////////////////////////////////////////////////////////       
 ROAD_WIDTH = CAR_WIDTH * 2 #should be roughly DOUBLE a saloon width
@@ -72,8 +96,7 @@ roads.append(road)
 #dt is the time elapsed since last call
 def update(dt): #ensuring consistent framerate and game logic to be frame-rate indepependent
     
-    global keys_pressed, ACCELERATION, TURNING_ACCEL, FRICTION, TURNING_FRICTION
-    print(keys_pressed)
+    global keys_pressed, ACCELERATION, DECELERATION, TURNING_ACCEL, FRICTION, TURNING_FRICTION
     for a in vAgents: #looping through every vehicle agent
         left, right, down, up = a.current_direction
         if left:
@@ -83,10 +106,8 @@ def update(dt): #ensuring consistent framerate and game logic to be frame-rate i
 
         if up:
             a.velocity += ACCELERATION * dt 
-            a.velocity -= FRICTION * dt 
         if down:
-            a.velocity -= ACCELERATION * dt 
-            a.velocity += FRICTION * dt  
+            a.velocity -= DECELERATION * dt 
 
         #FRICTION
         if not up and not down:
@@ -128,16 +149,23 @@ def update(dt): #ensuring consistent framerate and game logic to be frame-rate i
             else:
                 a.shape.color = (50, 225, 30)
 
-        #rotate and translate the vision lines
-        a.front_vehicle.x = a.left_vehicle.x = a.right_vehicle.x = a.shape.x
-        a.front_vehicle.y = a.left_vehicle.y = a.right_vehicle.y = a.shape.y
-        a.front_vehicle.rotation = a.left_vehicle.rotation = a.right_vehicle.rotation = -a.deg_angle
+            for i in range(a.num_vision_lines):
+                if not road.line_end_on_road(a.Lines[i].x2, a.Lines[i].y2):
+                    #decrease the vision length until it is NOT on the road
+                    a.lineLengths[i] = max(0, a.lineLengths[i] - 1)
+                    a.updateLines()
+                else:
+                    a.lineLengths[i] = min(a.maxLen, a.lineLengths[i] + 1)
+        a.updateLines()
         a.changeAnchor(a.turning_anchor_x, a.turning_anchor_y)
 
 def update_direction(dt): #operates on longer timesteps than animation update
     for a in vAgents:
         if not a.isControlled:
             a.updateDirection()
+        currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity, a.turning_speed, a.lineLengths]
+        print(currentState)
+
 
 def update_user_direction(dt):
     for a in vAgents:
@@ -155,7 +183,7 @@ def on_draw():
     gl.glClearColor(240 / 255.0, 240 / 255.0, 240 / 255.0, 1.0) #colour light grey
     window.clear()
     roadBatch.draw()
-    batch2.draw()
+    batch2.draw() #vision lines
     batch.draw()
     
 

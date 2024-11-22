@@ -3,6 +3,7 @@ import random
 import numpy as np
 from pyglet import shapes
 
+
 class VehicleAgent:
     def __init__(self, x, y, width, height, color, batch1, batch2, isControlled = False):
         self.isControlled = isControlled
@@ -15,16 +16,18 @@ class VehicleAgent:
         self.center_anchor_y = height // 2
         self.deg_angle = 0
         self.car_angle = math.radians(self.deg_angle)
-
-        self.vision_length = 2*width
         self.shape.anchor_position = self.turning_anchor_x, self.turning_anchor_y
-        self.front_vehicle = shapes.Line(x, y, x + math.cos(self.car_angle) * self.vision_length, y + math.sin(self.car_angle) * self.vision_length, width=1, color=(255, 0, 0), batch=batch2)
-        self.left_vehicle = shapes.Line(x, y, x + math.cos(self.car_angle + math.radians(45)) * self.vision_length, y + math.sin(self.car_angle + math.radians(45)) * self.vision_length, width=1, color=(255, 0, 0), batch=batch2)
-        self.right_vehicle = shapes.Line(x, y, x + math.cos(self.car_angle - math.radians(45)) * self.vision_length, y + math.sin(self.car_angle - math.radians(45)) * self.vision_length, width=1, color=(255, 0, 0), batch=batch2)
+
+        #LINES
+        self.maxLen = 2*width
+        self.num_vision_lines = 3
+        self.Lines = []#3
+        self.Angles = [0, 45, -45]#3
+        self.lineLengths = [self.maxLen]*self.num_vision_lines
+        self.defineLines(x, y, batch2, self.Angles)
 
         self.velocity = 0
         self.turning_speed = 0 #degree of turning for vehicle
-
         self.current_direction = [0, 0, 0, 0]  
 
     def getDirection(self):
@@ -47,6 +50,19 @@ class VehicleAgent:
         self.shape.anchor_x = anchor_x
         self.shape.anchor_y = anchor_y
 
+    def defineLines(self, x, y, batch, angles):
+        for i in range(self.num_vision_lines):
+            line = shapes.Line(x, y, x + math.cos(self.car_angle + math.radians(angles[i])) * self.maxLen, y + math.sin(self.car_angle + math.radians(angles[i])) * self.maxLen, width=1, color=(255, 0, 0), batch=batch)
+            self.Lines.append(line)
+
+    def updateLines(self):
+        for i in range(self.num_vision_lines):
+            self.Lines[i].x = self.shape.x
+            self.Lines[i].y = self.shape.y
+            self.Lines[i].x2 = self.shape.x + math.cos(self.car_angle + math.radians(self.Angles[i])) * self.lineLengths[i]
+            self.Lines[i].y2 = self.shape.y + math.sin(self.car_angle + math.radians(self.Angles[i])) * self.lineLengths[i]
+    
+
 
 class RoadTile:
     def __init__(self, start_x, start_y, end_x, end_y, width, color, batch):
@@ -59,24 +75,12 @@ class RoadTile:
         self.batch = batch
         self.road_line = shapes.Line(start_x, start_y, end_x, end_y, width, color, batch=batch)
 
-    def is_on_road(self, object): #check whether the ANCHOR of a shape is inside the road, if yes then return true
-
-
-        # def point_to_segment_distance(px, py, x1, y1, x2, y2):
-        #     line_vec = np.array([x2 - x1, y2 - y1])
-        #     point_vec = np.array([px - x1, py - y1])
-        #     line_len = np.linalg.norm(line_vec)
-        #     line_unitvec = line_vec / line_len
-        #     point_vec_scaled = point_vec / line_len
-        #     t = np.dot(line_unitvec, point_vec_scaled)
-        #     t = np.clip(t, 0, 1)
-        #     nearest = np.array([x1, y1]) + t * line_vec
-        #     distance = np.linalg.norm(np.array([px, py]) - nearest)
-        #     return distance
-        
-        # distance = point_to_segment_distance(object.shape.x, object.shape.y, self.start_x, self.start_y, self.end_x, self.end_y)
-        # return distance <= self.width / 2 #distance from object to road line
-        return object in self.road_line
+    def is_on_road(self, object_pos): #check whether the ANCHOR of a shape is inside the road, if yes then return true
+        return object_pos in self.road_line
+    
+    def line_end_on_road(self, x2, y2):
+        return self.is_on_road((x2, y2))#if ends of vision line NOT in contact with road
+            
 
 
 
