@@ -20,9 +20,9 @@ class VehicleAgent:
 
         #LINES
         self.maxLen = 2*width
-        self.num_vision_lines = 3
-        self.Lines = []#3
-        self.Angles = [0, 45, -45]#3
+        self.num_vision_lines = 6
+        self.Lines = []#6
+        self.Angles = [0, 45, -45, 180, 135, 215]#3
         self.lineLengths = [self.maxLen]*self.num_vision_lines
         self.defineLines(x, y, batch2, self.Angles)
 
@@ -30,12 +30,25 @@ class VehicleAgent:
         self.turning_speed = 0 #degree of turning for vehicle
         self.current_direction = [0, 0, 0, 0]  
 
-    def getDirection(self):
+    def getDirection(self, action):
         if not self.isControlled:
-            return [random.choice([0, 1]) for _ in range(4)]
+            if action == 0:
+                return [0, 0, 0, 0]
+            elif action == 1:
+                return [1, 0, 0, 0]
+            elif action == 2:
+                return [0, 1, 0, 0]
+            elif action == 3:
+                return [0, 0, 1, 0]
+            elif action == 4:
+                return [0, 0, 0, 1]
+            else:
+                print("Invalid action")
+                return [0, 0, 0, 0]
 
-    def updateDirection(self): #vehicle only changes its desired direction after a chosen number of timesteps (longer than native refresh rate)
-        self.current_direction = self.getDirection()
+        
+    def updateDirection(self, action): #vehicle only changes its desired direction after a chosen number of timesteps (longer than native refresh rate)
+        self.current_direction = self.getDirection(action)
 
     def changeAnchor(self, anchor_x, anchor_y):
         # Calculate the difference in anchor position
@@ -75,11 +88,32 @@ class RoadTile:
         self.batch = batch
         self.road_line = shapes.Line(start_x, start_y, end_x, end_y, width, color, batch=batch)
 
+        #checkpoints for vehicle to travel on track
+        # self.checkpoints = []
+        # num_checkpoints = 20
+        # checkpoint_width = 10
+        # checkpoint_height = width
+        # interval = (end_x - start_x) / (num_checkpoints + 1)
+        # for i in range(1, num_checkpoints + 1):
+        #     checkpoint_x = start_x + i * interval
+        #     checkpoint_y = start_y
+        #     checkpoint = shapes.Rectangle(checkpoint_x - checkpoint_width / 2, checkpoint_y - checkpoint_height / 2, checkpoint_width, checkpoint_height, color=(0, 255, 0), batch=batch)
+        #     self.checkpoints.append(checkpoint)
+
+
     def is_on_road(self, object_pos): #check whether the ANCHOR of a shape is inside the road, if yes then return true
         return object_pos in self.road_line
     
     def line_end_on_road(self, x2, y2):
         return self.is_on_road((x2, y2))#if ends of vision line NOT in contact with road
+
+    # def is_in_checkpoint(self, object_pos):
+    #     # Check if the object position is within the checkpoint rectangle
+    #     for checkpoint in self.checkpoints:
+    #         if (checkpoint.x <= object_pos[0] <= checkpoint.x + checkpoint.width and
+    #             checkpoint.y <= object_pos[1] <= checkpoint.y + checkpoint.height):
+    #             return True
+    #     return False
             
 
 
