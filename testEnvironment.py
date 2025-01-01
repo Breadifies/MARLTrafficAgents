@@ -180,7 +180,7 @@ def on_draw():
 GAMMA = 0.99 #discount factor for future rewards (higher means more long-term oriented)
 ACTOR_LEARNING_RATE = 0.001
 CRITIC_LEARNING_RATE = 0.001
-UPDATE_FREQUENCY = 0.1 #how often agent direction is updated (lower is more frequent)
+UPDATE_FREQUENCY = 0.2 #how often agent direction is updated (lower is more frequent)
 MAX_EP_LENGTH = 5/UPDATE_FREQUENCY
 ACTOR_EPSILON = 0.5 #exploration rate chance
 MIN_EPSILON = 0.05

@@ -24,8 +24,8 @@ def on_key_release(symbol, modifiers):
 
 
 #standardise vehicles
-CAR_WIDTH = 42
-CAR_HEIGHT = 30
+CAR_WIDTH = 100
+CAR_HEIGHT = 300/7
 vAgent = shapes.Rectangle(x=400, y=450, width=CAR_WIDTH, height=CAR_HEIGHT, color=(50, 225, 30), batch=batch)
 vAgent.anchor_x = CAR_WIDTH//4
 vAgent.anchor_y = CAR_HEIGHT//2
