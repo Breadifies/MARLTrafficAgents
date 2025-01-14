@@ -9,15 +9,18 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-
+import optuna #optimise hyperparameters
 
 window = pyglet.window.Window(width=800, height=600, vsync=True)  # vsync, eliminate unnecessary variables
 WINDOW_WIDTH, WINDOW_HEIGHT = window.get_size()
+
+#GRAPHICS RENDERING batches...
 batch = pyglet.graphics.Batch()
 batch2 = pyglet.graphics.Batch()
 roadBatch = pyglet.graphics.Batch()
 
-keys_pressed = [0]*4 #allows for multiple presses
+#allows for multiple presses
+keys_pressed = [0]*4 
 @window.event
 def on_key_press(symbol, modifiers): #symbol is virtual key, modifiers area bitwise combination of present modifiers
     if symbol == key.LEFT:
@@ -41,27 +44,31 @@ def on_key_release(symbol, modifiers):
 
 
 #/////////////////////////////////////////////////////////////////////////////////////////#/////////////////////////////////////////////////////////////////////////////////////////  
+
 # //CONVERSION OF REAL-WORLD UNITS to SIMULATION UNITS  (meters, km/h to pixels/frame)
 MU = 13 #1 meter = n pixels (based on vehicle width) (METER UNIT)
-TOP_SPEED = MU*150 #48km/h  pixels per second (15)
-TOP_TURNING_SPEED = MU*13 #13
-ACCELERATION = MU * 5
-DECELERATION = ACCELERATION * 3
-TURNING_ACCEL = MU * 15 #15 #assume turning acceleration of 5m/s
-FRICTION = MU * 3 #FRICTION coefficient
-TURNING_FRICTION = MU * 20 #how quickly rotation stops
 CAR_LENGTH = MU*4.2 #4.2 meters, pixel per meter 21:9 ratio standard
 CAR_WIDTH = MU*1.8  #= 1.8 meters to pixels is 24, therfore 1 meter = 13.33 pixels
-SPEED_UP = 1 #speed up simulation
 
+TOP_SPEED = MU*600 #150 #48km/h  pixels per second (15)
+TOP_TURNING_SPEED = MU*130 #13
+ACCELERATION = MU * 40#5
+DECELERATION = ACCELERATION * 3
+TURNING_ACCEL = MU * 50 #15 #assume turning acceleration of 5m/s
+FRICTION = MU * 12 #3 #FRICTION coefficient 
+TURNING_FRICTION = MU * 80 #20 #how quickly rotation stops
 INITIAL_VELOCITY = 300 #initial velocity
 
+SPEED_UP = 1 #speed up simulation
+
+#SETUP ENVIRONMENT
 vAgents = [
     VehicleAgent(x=(WINDOW_WIDTH*0.1), y=WINDOW_HEIGHT/2, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2, isControlled=False)
 ]
 vAgents[0].velocity = INITIAL_VELOCITY #initial velocity
 vAgents[0].deg_angle = 20 #initial angle
-#/////////////////////////////////////////////////////////////////////////////////////////#////////////////////////////////////////////////////////////////////////////////////////       
+#/////////////////////////////////////////////////////////////////////////////////////////#////////////////////////////////////////////////////////////////////////////////////////  
+
 ROAD_WIDTH = CAR_WIDTH * 4 #should be roughly DOUBLE a saloon width
 roads = []
 road = RoadTile(start_x=(WINDOW_WIDTH*0.1), start_y=WINDOW_HEIGHT/2, end_x=(WINDOW_WIDTH*0.9), end_y=WINDOW_HEIGHT/2, width=ROAD_WIDTH, color=(50, 50, 50), batch=roadBatch)
@@ -69,7 +76,6 @@ roads.append(road)
  
 
 #HITCHECKPOINT = False
-
 
 #dt is the time elapsed since last call
 def update(dt): #ensuring consistent framerate and game logic to be frame-rate indepependent
@@ -118,7 +124,7 @@ def update(dt): #ensuring consistent framerate and game logic to be frame-rate i
         if abs(a.velocity) > TOP_SPEED*2: #clamp top speed (max drag)
             a.velocity = TOP_SPEED*2*np.sign(a.velocity)
         if abs(a.turning_speed) > TOP_TURNING_SPEED: #clamp top turning speed
-           a.turning_speed = TOP_TURNING_SPEED*2*np.sign(a.turning_speed)
+           a.turning_speed = TOP_TURNING_SPEED*np.sign(a.turning_speed)
 
         # Check if the vehicle is on the road
         a.changeAnchor(a.center_anchor_x, a.center_anchor_y) #center anchor position temporarily
@@ -169,22 +175,20 @@ def on_draw():
 
 
 
-
-
-
-
-
-
 #/////////////////////////////////////////////////////////////////////////////////////////#/////////////////////////////////////////////////////////////////////////////////////////
 ### HYPERPARAMETERS
 GAMMA = 0.99 #discount factor for future rewards (higher means more long-term oriented)
 ACTOR_LEARNING_RATE = 0.001
 CRITIC_LEARNING_RATE = 0.001
-UPDATE_FREQUENCY = 0.2 #how often agent direction is updated (lower is more frequent)
-MAX_EP_LENGTH = 5/UPDATE_FREQUENCY
+UPDATE_FREQUENCY = 0.05 #how often agent direction is updated (lower is more frequent)
 ACTOR_EPSILON = 0.5 #exploration rate chance
 MIN_EPSILON = 0.05
 EPSILON_DECAY = 0.99
+
+MAX_EP_LENGTH = 5/UPDATE_FREQUENCY
+
+
+
 
 
 
@@ -297,9 +301,11 @@ optActor = torch.optim.AdamW(actor_func.parameters(), lr=ACTOR_LEARNING_RATE) #s
 optCritic = torch.optim.AdamW(value_func.parameters(), lr=CRITIC_LEARNING_RATE) #these are the OPTIMISER ALGORITHMS to find best weights
 #optcritic has faster learning rate
 reward_records = [] #keep record for analysis later
+
 global_states = []
 global_actions = []
 global_rewards = []
+
 current_len = 0
 episode = 0
 

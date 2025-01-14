@@ -1,0 +1,205 @@
+import pyglet
+import numpy as np
+import math
+from pyglet.window import key, mouse
+from pyglet import shapes
+from pyglet import gl 
+
+window = pyglet.window.Window(width=800, height=600, vsync=True)  # vsync, eliminate unnecessary variables
+WINDOW_WIDTH, WINDOW_HEIGHT = window.get_size()
+
+batch = pyglet.graphics.Batch()
+
+class RoadTile:
+    def __init__(self, start_x, start_y, end_x, end_y, width, color, batch):
+        self.start_x = start_x
+        self.start_y = start_y
+        self.end_x = end_x
+        self.end_y = end_y
+        self.width = width
+        self.color = color
+        self.batch = batch
+        self.roadShape = shapes.Line(start_x, start_y, end_x, end_y, width, color, batch=batch) #shape
+        self.roadFollow = shapes.Line(start_x, start_y, end_x, end_y, 5, (255, 0, 0), batch=batch) #line for vehicle to follow
+
+    def is_on_road(self, object_pos): #check on road itself
+        return object_pos in self.roadShape
+    
+    def is_on_follow(self, object_pos): #check orientation matches on road
+        return object_pos in self.roadFollow
+    
+class VehicleAgent:
+    def __init__(self, x, y, width, height, color, batch1):
+        self.shape = shapes.Rectangle(x=x, y=y, width=width, height=height, color=color, batch=batch1)
+        self.width = width
+        self.height = height
+        self.turning_anchor_y = height // 2 #center at all times
+        self.turning_anchor_x = width // 4
+        self.follow_anchor_x = width / 1.5
+        self.deg_angle = 0
+        self.car_angle = math.radians(self.deg_angle)
+        self.shape.anchor_position = self.turning_anchor_x, self.turning_anchor_y
+
+        self.velocity = 0
+        self.turning_speed = 0
+        self.current_direction = [0, 0, 0, 0]
+
+        self.curRoad = None #check the road segment its on
+
+    def updateDirection(self, action): #vehicle only changes its desired direction after a chosen number of timesteps (longer than native refresh rate)
+        self.current_direction = self.getDirection(action)
+
+    def changeAnchor(self, anchor_x, anchor_y):
+        #calculate difference in anchor position
+        dx = anchor_x - self.shape.anchor_x
+        dy = anchor_y - self.shape.anchor_y
+        rotated_dx = dx * math.cos(self.car_angle) - dy * math.sin(self.car_angle)
+        rotated_dy = dx * math.sin(self.car_angle) + dy * math.cos(self.car_angle)
+        #Update shape's position to account for new anchor
+        self.shape.x += rotated_dx
+        self.shape.y += rotated_dy
+        #Update anchor position
+        self.shape.anchor_x = anchor_x
+        self.shape.anchor_y = anchor_y
+
+
+
+
+
+ROAD_WIDTH = 20
+# Circle parameters
+center_x = 250  # Center of the circle (x-coordinate)
+center_y = 250  # Center of the circle (y-coordinate)
+radius = 150  # Radius of the circle
+num_tiles = 20  # Number of road tiles
+# Angle between each tile
+angle_increment = 2 * math.pi / num_tiles
+# Creating road tiles along a circular path
+roads = [
+    RoadTile(
+        start_x=center_x + radius * math.cos(angle_increment * i),
+        start_y=center_y + radius * math.sin(angle_increment * i),
+        end_x=center_x + radius * math.cos(angle_increment * (i + 1)),
+        end_y=center_y + radius * math.sin(angle_increment * (i + 1)),
+        width=ROAD_WIDTH,
+        color=(50, 50, 50),
+        batch=batch
+    )
+    for i in range(num_tiles)
+]
+
+
+#allows for multiple presses
+keys_pressed = [0]*4 
+@window.event
+def on_key_press(symbol, modifiers): #symbol is virtual key, modifiers area bitwise combination of present modifiers
+    if symbol == key.LEFT:
+        keys_pressed[0] = 1
+    elif symbol == key.RIGHT:
+        keys_pressed[1] = 1
+    elif symbol == key.DOWN:
+        keys_pressed[2] = 1
+    elif symbol == key.UP:
+        keys_pressed[3] = 1
+@window.event
+def on_key_release(symbol, modifiers):
+    if symbol == key.LEFT:
+        keys_pressed[0] = 0
+    elif symbol == key.RIGHT:
+        keys_pressed[1] = 0
+    elif symbol == key.DOWN:
+        keys_pressed[2] = 0
+    elif symbol == key.UP:
+        keys_pressed[3] = 0
+
+MU = 13 #1 meter = n pixels (based on vehicle width) (METER UNIT)
+CAR_LENGTH = MU*4.2 #4.2 meters, pixel per meter 21:9 ratio standard
+CAR_WIDTH = MU*1.8  #= 1.8 meters to pixels is 24, therfore 1 meter = 13.33 pixels
+TOP_SPEED = MU*600 #150 #48km/h  pixels per second (15)
+TOP_TURNING_SPEED = MU*130 #13
+ACCELERATION = MU * 40#5
+DECELERATION = ACCELERATION * 3
+TURNING_ACCEL = MU * 50 #15 #assume turning acceleration of 5m/s
+FRICTION = MU * 12 #3 #FRICTION coefficient 
+TURNING_FRICTION = MU * 80 #20 #how quickly rotation stops
+INITIAL_VELOCITY = 0 #initial velocity
+
+SPEED_UP = 1 #speed up simulation
+
+#SETUP ENVIRONMENT
+vAgents = [
+    VehicleAgent(x=250, y=375, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch)
+]
+vAgents[0].velocity = INITIAL_VELOCITY #initial velocity
+vAgents[0].deg_angle = 20 #initial angle
+
+def update(dt):
+    dt = dt * SPEED_UP
+    global keys_pressed, ACCELERATION, DECELERATION, FRICTION
+    for a in vAgents:
+        #NO TURNING
+        left, right, down, up = a.current_direction
+
+        if up:
+            a.velocity += ACCELERATION * dt 
+        if down:
+            a.velocity -= DECELERATION * dt 
+        #FRICTION
+        if not up and not down:
+            if a.velocity > 0:
+                a.velocity -= FRICTION * dt     
+            elif a.velocity < 0:
+                a.velocity += FRICTION * dt 
+
+
+        #CHECK IF FOLLOWING ROAD LINE
+        onFollow = False
+        if a.curRoad == None: #if no road assigned
+            a.curRoad = roads[0] #assign first road
+
+        a.changeAnchor(a.follow_anchor_x, a.turning_anchor_y) #road check based on follow anchor
+        if not a.curRoad.is_on_road((a.shape.position)):#on a new road
+            for index, road in enumerate(roads): #check what new road its on
+                if road.is_on_road((a.shape.position)): # new road found
+                        a.curRoad = road  #reassign road
+                        print("ROAD:", index)
+    
+        changedAngle = 0
+        if not onFollow:#check if vehicle is oriented correctly on road segment
+            a.changeAnchor(a.follow_anchor_x, a.turning_anchor_y) #anchor to follow road line temporarily
+            if a.curRoad.is_on_follow(a.shape.position): #check if oriented correctly
+                onFollow = True        
+            else:
+                a.changeAnchor(a.turning_anchor_x, a.turning_anchor_y)  
+                changedAngle += 1
+                a.shape.rotation += 1
+    
+        a.changeAnchor(a.turning_anchor_x, a.turning_anchor_y)
+        
+        #rotate the vehicle
+        a.deg_angle = (a.deg_angle - changedAngle)%360
+        a.car_angle = math.radians(a.deg_angle)
+        a.shape.x += a.velocity * dt * math.cos(a.car_angle) 
+        a.shape.y += a.velocity * dt * math.sin(a.car_angle) 
+        a.shape.rotation = -a.deg_angle
+
+        if abs(a.velocity) < 0.1: #clamp minimum speed
+            a.velocity = 0
+        if abs(a.velocity) > TOP_SPEED*2: #clamp top speed (max drag)
+            a.velocity = TOP_SPEED*2*np.sign(a.velocity)
+        
+
+def update_user_direction(dt):
+    for a in vAgents:
+        a.current_direction = keys_pressed
+
+@window.event
+def on_draw():
+    gl.glClearColor(240 / 255.0, 240 / 255.0, 240 / 255.0, 1.0) #colour light grey
+    window.clear()
+    batch.draw()
+
+pyglet.clock.schedule(update)
+pyglet.clock.schedule(update_user_direction)
+
+pyglet.app.run()
