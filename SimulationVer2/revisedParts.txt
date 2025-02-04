@@ -1,2 +1,42 @@
 Separate the actor-critic network code from the logic for vehicle physics
 Create new roads that can be more sustainably used
+
+#DO IMPORTS
+
+#DEFINE SETUP -> window, graphics processing
+
+#DEFINE REAL-WORLD CONSTANTS
+
+#SET UP AGENT ENVIRONMENT
+#SET UP ROAD ENVIRONMENT
+
+#DEFINE UPDATE FUNCTION fo EVERY AGENT
+    #INCLUDES updates to vehicle positions and speed
+    #INCLUDES updates to vision lines
+    #INCLUDES checks for road collisions
+
+#DRAW THE EVENT
+
+#DEFINE HYPERPARAMETERS
+
+#CALCULATE reward for a vehicle agent at a current state FUNCTION
+#RESET ENVIRONMENT FUNCTION
+#UPDATE DIRECITON OF VEHICLE FUNCTION -> uses global_states, global_actions, global_rewards
+
+#DEFINE ACTOR-CRITIC NETWORK 
+    #DEFINE ACTOR NETWORK
+    #DEFINE CRITIC VALUE NETWORK
+#instantiate
+#PICK ACTION FUNCTION
+#define optimisation methods for actor and critic
+
+#DEFINE training loop record information...
+#DEFINE UPDATE loop for agent 
+    #optimise value LOSS (critic)
+    #optimise policy LOSS (actor)
+    #OUTPUT total rewards in current episode
+
+#DEFINE pyglet clock schedule
+#run pyglet app
+
+#PLOT RESULTS
