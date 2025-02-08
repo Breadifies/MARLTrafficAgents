@@ -67,7 +67,7 @@ roads = [
     #     batch2 = batch2
     # )
     # for i in range(num_tiles)
-    RoadTile(start_x = 100, start_y = WINDOW_HEIGHT//2, end_x = 200, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 10, start_y = WINDOW_HEIGHT//2, end_x = 200, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
     RoadTile(start_x = 200, start_y = WINDOW_HEIGHT//2, end_x = 300, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
     RoadTile(start_x = 300, start_y = WINDOW_HEIGHT//2, end_x = 400, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
     RoadTile(start_x = 400, start_y = WINDOW_HEIGHT//2, end_x = 500, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
@@ -198,7 +198,7 @@ def on_draw():
 
 ####################ACTOR-CRITIC-NETWORK###########################
 GAMMA = 0.90
-ACTOR_LEARNING_RATE = 0.001
+ACTOR_LEARNING_RATE = 0.0001
 CRITIC_LEARNING_RATE = 0.001
 UPDATE_FREQUENCY = 0.05
 ACTOR_EPSILON = 0.5
@@ -304,7 +304,7 @@ def calculate_reward(current_state):
     if HIT_CHECKPOINT:
         reward += 100
         HIT_CHECKPOINT = False
-    if vAgents[0].velocity <=0:
+    if vAgents[0].velocity <=0: #encourage forward movement
         reward -= 1
     reward -= 1
     return reward
