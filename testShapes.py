@@ -29,6 +29,7 @@ class RoadTile:
     def is_on_follow(self, object_pos): #check orientation matches on road
         return object_pos in self.roadFollow
     
+    
 class VehicleAgent:
     def __init__(self, x, y, width, height, color, batch1):
         self.shape = shapes.Rectangle(x=x, y=y, width=width, height=height, color=color, batch=batch1)
@@ -37,9 +38,8 @@ class VehicleAgent:
         self.turning_anchor_y = height // 2 #center at all times
         self.turning_anchor_x = width // 4
         self.followF_anchor_x = width / 1.5 #forwards driving
-        self.followB_anchor_x = self.turning_anchor_x - (self.followF_anchor_x - self.turning_anchor_x) #backwards driving (center of rotation outside)
+        self.followB_anchor_x = 2*self.turning_anchor_x - self.followF_anchor_x #backwards driving (center of rotation outside)
         self.deg_angle = 0
-        self.car_angle = math.radians(self.deg_angle)
         self.shape.anchor_position = self.turning_anchor_x, self.turning_anchor_y
 
         self.velocity = 0
@@ -53,18 +53,21 @@ class VehicleAgent:
     def updateDirection(self, action): #vehicle only changes its desired direction after a chosen number of timesteps (longer than native refresh rate)
         self.current_direction = self.getDirection(action)
 
-    def changeAnchor(self, anchor_x, anchor_y):
+    def changeAnchor(self, anchor_x, anchor_y): #has to be done manually due to pyglet shape properties
         #calculate difference in anchor position
         dx = anchor_x - self.shape.anchor_x
         dy = anchor_y - self.shape.anchor_y
-        rotated_dx = dx * math.cos(self.car_angle) - dy * math.sin(self.car_angle)
-        rotated_dy = dx * math.sin(self.car_angle) + dy * math.cos(self.car_angle)
+        car_angle = math.radians(self.deg_angle)
+        rotated_dx = dx * math.cos(car_angle) - dy * math.sin(car_angle)
+        rotated_dy = dx * math.sin(car_angle) + dy * math.cos(car_angle)
         #Update shape's position to account for new anchor
         self.shape.x += rotated_dx
         self.shape.y += rotated_dy
         #Update anchor position
-        self.shape.anchor_x = anchor_x
-        self.shape.anchor_y = anchor_y
+        self.shape.anchor_position = (anchor_x, anchor_y)
+
+
+
 
 
 ROAD_WIDTH = 20
@@ -118,20 +121,21 @@ MU = 7 #1 meter = n pixels (based on vehicle width) (METER UNIT)
 CAR_LENGTH = MU*4.2 #4.2 meters, pixel per meter 21:9 ratio standard
 CAR_WIDTH = MU*1.8  #= 1.8 meters to pixels is 24, therfore 1 meter = 13.33 pixels
 TOP_SPEED = MU*50 #150 #48km/h  pixels per second (15)
-#TOP_TURNING_SPEED = MU*130 #13
 ACCELERATION = MU * 70#5
 DECELERATION = ACCELERATION * 2.5
-TURNING_ACCEL = MU * 50 #15 #assume turning acceleration of 5m/s
 FRICTION = MU * 12 #3 #FRICTION coefficient 
-TURNING_FRICTION = MU * 80 #20 #how quickly rotation stops
 INITIAL_VELOCITY = 0 #initial velocity
 
 SPEED_UP = 1 #speed up simulation
 
 #SETUP ENVIRONMENT
 vAgents = [
-    VehicleAgent(x=250, y=100, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch)
+    VehicleAgent(x=250, y=100, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch),
+    VehicleAgent(x=250, y=400, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch),
+    VehicleAgent(x=100, y=250, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch),
+    VehicleAgent(x=400, y=250, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch)
 ]
+
 vAgents[0].velocity = INITIAL_VELOCITY #initial velocity
 vAgents[0].deg_angle = 20 #initial angle
 
@@ -152,6 +156,7 @@ def update(dt):
                 a.velocity -= FRICTION * dt     
             elif a.velocity < 0:
                 a.velocity += FRICTION * dt 
+
 
 
         #CHECK IF FOLLOWING ROAD LINE
@@ -178,7 +183,7 @@ def update(dt):
                 a.increment = 0
                 onFollow = True       
             else: #NOT ORIENTED CORRECTLY -> ROTATE
-                a.increment += 0.25
+                a.increment += 0.5
                 a.changeAnchor(a.turning_anchor_x, a.turning_anchor_y) #rotate based on c.o.r
                 changedAngle += a.clockwise*a.increment
                 a.shape.rotation += a.clockwise*a.increment
@@ -188,10 +193,12 @@ def update(dt):
         a.changeAnchor(a.turning_anchor_x, a.turning_anchor_y)
         #rotate the vehicle
         a.deg_angle = (a.deg_angle - changedAngle)%360
-        a.car_angle = math.radians(a.deg_angle)
-        a.shape.x += a.velocity * dt * math.cos(a.car_angle) 
-        a.shape.y += a.velocity * dt * math.sin(a.car_angle) 
+        car_angle = math.radians(a.deg_angle)
+        a.shape.x += a.velocity * dt * math.cos(car_angle) 
+        a.shape.y += a.velocity * dt * math.sin(car_angle) 
         a.shape.rotation = -a.deg_angle
+
+
 
         if abs(a.velocity) < 0.1: #clamp minimum speed
             a.velocity = 0

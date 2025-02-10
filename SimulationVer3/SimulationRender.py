@@ -4,7 +4,7 @@ import math
 from pyglet.window import key
 from pyglet import shapes
 from pyglet import gl
-from shapeClasses import VehicleAgent, RoadTile
+from shapeClasses import VehicleAgent, RoadTile, PedestrianAgent
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -67,12 +67,18 @@ roads = [
     #     batch2 = batch2
     # )
     # for i in range(num_tiles)
-    RoadTile(start_x = 10, start_y = WINDOW_HEIGHT//2, end_x = 200, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 200, start_y = WINDOW_HEIGHT//2, end_x = 300, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 300, start_y = WINDOW_HEIGHT//2, end_x = 400, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 400, start_y = WINDOW_HEIGHT//2, end_x = 500, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 500, start_y = WINDOW_HEIGHT//2, end_x = 600, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 600, start_y = WINDOW_HEIGHT//2, end_x = 700, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2)
+    RoadTile(start_x = -100, start_y = WINDOW_HEIGHT//2, end_x = 150, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 150, start_y = WINDOW_HEIGHT//2, end_x = 200, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 200, start_y = WINDOW_HEIGHT//2, end_x = 250, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 250, start_y = WINDOW_HEIGHT//2, end_x = 300, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 300, start_y = WINDOW_HEIGHT//2, end_x = 350, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 350, start_y = WINDOW_HEIGHT//2, end_x = 400, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 400, start_y = WINDOW_HEIGHT//2, end_x = 450, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 450, start_y = WINDOW_HEIGHT//2, end_x = 500, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 500, start_y = WINDOW_HEIGHT//2, end_x = 550, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 550, start_y = WINDOW_HEIGHT//2, end_x = 600, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 600, start_y = WINDOW_HEIGHT//2, end_x = 650, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x = 650, start_y = WINDOW_HEIGHT//2, end_x = 700, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2)
 
 ]
 ###################################################################
@@ -86,9 +92,17 @@ vAgents = [
     # VehicleAgent(x=550, y=310, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2)
     VehicleAgent(x=120, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2)
     ]
-vAgents[0].velocity = 500
+vAgents[0].velocity = 0
 initVel = [0 * len(vAgents)]
 initAngle = [0 * len(vAgents)]
+###################################################################
+
+
+#################CONSTRUCTINGPEDESTRIANS#################################
+pAgents = [
+    PedestrianAgent(x=400, y=400, target_x = 400, target_y = 200, radius=10, color=(0, 0, 100), batch=batch)
+]
+
 ###################################################################
 
 HIT_CHECKPOINT = False
@@ -96,6 +110,10 @@ HIT_CHECKPOINT = False
 def update(dt):
     dt = dt * SPEED_UP
     global keys_pressed, ACCELERATION, DECELERATION, FRICTION, TOP_SPEED, TOP_REV_SPEED, HIT_CHECKPOINT
+    
+    for p in pAgents:
+        p.move(dt*0.1) #move towards target
+
     for a in vAgents:
         down, up = a.current_direction
 
@@ -142,7 +160,6 @@ def update(dt):
                 a.clockwise = -a.clockwise #rotate in opposite direction
         a.changeAnchor(a.turn_anch_x, a.turn_anch_y) 
 
-
         #rotate vehicle
         a.deg_angle = (a.deg_angle - changedAngle)%360
         car_angle = math.radians(a.deg_angle)
@@ -153,20 +170,8 @@ def update(dt):
         for road in roads:
             if road.passed_checkpoint(a.shape.position):
                 HIT_CHECKPOINT = True
-
-        # for v in vAgents: #check distance of vision lines from other vehicles
-        #     intersect = False #check if its intersecting WITH ANY object
-        #     if not (v == a):
-        #         for i in range(a.num_vision_lines):
-        #             if not v.line_end_on_agent(a.Lines[i].x2, a.Lines[i].y2):
-        #                 a.lineLengths[i] = min(a.maxLen, a.lineLengths[i] + 1)
-                        
-        #             else:
-        #                 intersect = True
-        #                 a.lineLengths[i] = max(0, a.lineLengths[i] - 1)
-        #     if intersect: #already intersecting with an agent, don't check others
-        #         break
-        # a.updateLines()
+        
+        a.updateLines()
         
         if abs(a.velocity) < 0.1: #clamp minimum speed
             a.velocity = 0
@@ -207,13 +212,14 @@ EPSILON_DECAY = 0.99
 MAX_EP_LENGTH = 5/UPDATE_FREQUENCY
 
 
+#NETWORKS-------------------------------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ACTOR_INPUTS = 4 #a.shape.x, a.shape.y, a.deg_angle ,shape.a.velocity
 class ActorNet(nn.Module):
-    def __init__(self, hidden_dim=16):
+    def __init__(self, hidden_dim_1=128):
         super().__init__()
-        self.hidden = nn.Linear(ACTOR_INPUTS, hidden_dim)
-        self.output = nn.Linear(hidden_dim, 3) #no action, backwards, forwards
+        self.hidden = nn.Linear(ACTOR_INPUTS, hidden_dim_1)
+        self.output = nn.Linear(hidden_dim_1, 3) #no action, backwards, forwards
         self.epsilon = ACTOR_EPSILON
     def forward(self, s):
         outs = self.hidden(s)
@@ -221,24 +227,26 @@ class ActorNet(nn.Module):
         logits = self.output(outs)
         return logits
 class ValueNet(nn.Module):
-    def __init__(self, hidden_dim=16):
+    def __init__(self, hidden_dim_1=128):
         super().__init__()
-        self.hidden = nn.Linear(ACTOR_INPUTS, hidden_dim)
-        self.output = nn.Linear(hidden_dim, 1)
+        self.hidden = nn.Linear(ACTOR_INPUTS, hidden_dim_1)
+        self.output = nn.Linear(hidden_dim_1, 1)
     def forward(self, s):
         outs = self.hidden(s)
         outs = F.relu(outs)
         value = self.output(outs)
         return value
-    
 actor_func = ActorNet().to(device)
 value_func = ValueNet().to(device)
+#----------------------------------------------------------------------
+
 
 def pick_action(state, actor):
     if np.random.rand() < ACTOR_EPSILON:
         action = np.random.choice(range(actor.output.out_features))
         print("ACTION TAKEN: ", action)
         return action
+    
     with torch.no_grad():
         state_batch = np.expand_dims(state, axis=0)
         state_batch = torch.tensor(state_batch, dtype=torch.float).to(device)
@@ -253,18 +261,21 @@ optActor = torch.optim.AdamW(actor_func.parameters(), lr=ACTOR_LEARNING_RATE)
 optCritic = torch.optim.AdamW(value_func.parameters(), lr=CRITIC_LEARNING_RATE)
 
 reward_records = []
+rewardP_records = []
 agent_states = []
 agent_actions = []
 agent_rewards = []
+agentP_rewards = []
 current_len = 0
 episode = 0
 
-def update_agent():
-    global agent_states, agent_actions, agent_rewards, episode, ACTOR_EPSILON
+def update_agent(agent_states, agent_actions, agent_rewards, agentP_rewards):
+    global episode, ACTOR_EPSILON
     cum_rewards = np.zeros_like(agent_rewards)
     reward_len = len(agent_rewards)
     for j in reversed(range(reward_len)):
         cum_rewards[j] = agent_rewards[j] + (cum_rewards[j+1]*GAMMA if j+1<reward_len else 0)
+
     optCritic.zero_grad()
     agent_states = torch.tensor(agent_states, dtype=torch.float).to(device)
     cum_rewards = torch.tensor(cum_rewards, dtype=torch.float).to(device)
@@ -286,8 +297,10 @@ def update_agent():
 
     episode += 1
     print("Run episode{} with rewards {}".format(episode, sum(agent_rewards)))
+    print("And with pRewards {}".format(sum(agentP_rewards)))
     print("ACTOR EPSILON: ", ACTOR_EPSILON)
     reward_records.append(sum(agent_rewards))
+    rewardP_records.append(sum(agentP_rewards))
     ACTOR_EPSILON = max(MIN_EPSILON, ACTOR_EPSILON*EPSILON_DECAY)
 
     if episode > 4000:
@@ -301,32 +314,40 @@ def update_agent():
 def calculate_reward(current_state):
     global HIT_CHECKPOINT
     reward = 0
+    rewardP = 0
     if HIT_CHECKPOINT:
-        reward += 100
+        reward += 200
         HIT_CHECKPOINT = False
-    if vAgents[0].velocity <=0: #encourage forward movement
-        reward -= 1
-    reward -= 1
-    return reward
+    if vAgents[0].velocity >=0: #encourage forward movement
+        reward += vAgents[0].velocity
+    for p in pAgents:
+        if p.is_on_ped(vAgents[0].shape.position):
+            rewardP -= 100
+        else:
+            rewardP += 50
+    return [reward, rewardP]
 
 def resetEnvironment():
-    global vAgents, agent_states, agent_actions, agent_rewards, current_len, initVel, roads
+    global vAgents, agent_states, agent_actions, agent_rewards, agentP_rewards, current_len, initVel, roads
     for road in roads:
         road.passed = False
     #vAgents = create New agents function ()
     vAgents = [VehicleAgent(x=120, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2)]
     for i, a in enumerate(vAgents):
-        a.velocity = 500
+        a.velocity = 0
         a.shape.rotation = initAngle[i]
     agent_states = []
     agent_actions = []
     agent_rewards = []
+    agentP_rewards = []
     current_len = 0
 
 def update_direction(dt):
-    global current_len, agent_states
+    global current_len, agent_states, agent_actions, agent_rewards, agentP_rewards
     current_len = current_len + 1
+    current_reward = []
     for a in vAgents:
+        current_reward = []
         currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity]
         agent_states.append(currentState)
         action = pick_action(currentState, actor_func)
@@ -334,9 +355,10 @@ def update_direction(dt):
             a.updateDirection(action)
         agent_actions.append(action)
         current_reward = calculate_reward(currentState)
-        agent_rewards.append(current_reward)
-    if current_len >= MAX_EP_LENGTH or roads[5].passed: #if exceeds max length or last part of road passed
-        update_agent()
+        agent_rewards.append(current_reward[0])
+        agentP_rewards.append(current_reward[1])
+    if current_len >= MAX_EP_LENGTH or roads[5].passed or vAgents[0].shape.x < 100: #if exceeds max length or last part of road passed
+        update_agent(agent_states, agent_actions, agent_rewards, agentP_rewards)
         resetEnvironment()
 
 ###################################################################
@@ -349,19 +371,31 @@ pyglet.clock.schedule(update_user_direction)
 pyglet.app.run()
 
 
+
+
+
 import matplotlib.pyplot as plt
+
 average_reward = []
+average_p_reward = []
+
 for idx in range(len(reward_records)):
     if idx < 50:
         avg_list = reward_records[:idx+1]
+        avg_p_list = rewardP_records[:idx+1]
     else:
         avg_list = reward_records[idx-49:idx+1]
+        avg_p_list = rewardP_records[idx-49:idx+1]
+    
     average_reward.append(np.average(avg_list))
+    average_p_reward.append(np.average(avg_p_list))
+
 plt.plot(reward_records, label='Reward per Episode')
 plt.plot(average_reward, label='Average Reward (Last 50 Episodes)')
+plt.plot(rewardP_records, label='pReward per Episode')
+plt.plot(average_p_reward, label='Average pReward (Last 50 Episodes)')
 plt.xlabel('Episode')
 plt.ylabel('Reward')
 plt.title('Rewards and Average Rewards Over Episodes')
 plt.legend()
-plt.show()
 plt.show()

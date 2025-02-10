@@ -238,6 +238,9 @@ def update_direction(dt): #operates on longer timesteps than animation update
         resetEnvironment() #should reset the environment back to the beginning
 
 
+
+
+
 #ACTOR_CRITIC_NETWORK.py
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -270,7 +273,6 @@ class ValueNet(nn.Module): #our VALUE network
 actor_func = ActorNet().to(device) 
 value_func = ValueNet().to(device)
 
-global_decisions = []
 
 def pick_action(state, actor):
     if np.random.rand() < ACTOR_EPSILON:
@@ -319,6 +321,7 @@ def update_agent():
         cum_rewards[j] = global_rewards[j] + (cum_rewards[j+1]*GAMMA if j+1 < reward_len else 0)
     
     #Train (optimise parameters)
+
     #optimisng value LOSS (critic)
     optCritic.zero_grad()
     global_states = torch.tensor(global_states, dtype=torch.float).to(device)
@@ -332,6 +335,7 @@ def update_agent():
     vf_loss.sum().backward()
     optCritic.step() 
 
+  
     #otimising policy loss (Actor)
     with torch.no_grad():
         values = value_func(global_states)
@@ -343,9 +347,7 @@ def update_agent():
     pi_loss = -log_probs * advantages
     pi_loss.sum().backward()
     optActor.step()
-    
 
-    
     #OUTPUT total rewards in current episode
     episode += 1
     print("Run episode{} with rewards {}".format(episode, sum(global_rewards)))
@@ -357,6 +359,12 @@ def update_agent():
     if episode > 1000:
         print("\nDone")
         pyglet.app.exit()
+
+
+
+
+
+
 
 
 
