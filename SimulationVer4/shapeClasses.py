@@ -1,5 +1,4 @@
 import math
-import copy
 from pyglet import shapes
 
 class VehicleAgent:

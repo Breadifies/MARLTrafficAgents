@@ -1,14 +1,15 @@
 import pyglet
 import numpy as np
 import math
-from pyglet.window import key
-from pyglet import shapes
 from pyglet import gl
-import copy
 from shapeClasses import VehicleAgent, RoadTile, PedestrianAgent
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import torch.optim as optim
+from torch.distributions import Categorical
+from collections import namedtuple
 
 window = pyglet.window.Window(width=800, height=600, vsync=True)
 WINDOW_WIDTH, WINDOW_HEIGHT = window.get_size()
@@ -100,9 +101,9 @@ for item in startPAgents:
 ###############PHYSICS RENDERING###################################
 def update(dt):
     dt = dt * SPEED_UP
-    global ACCELERATION, DECELERATION, FRICTION, TOP_SPEED, TOP_REV_SPEED, HIT_CHECKPOINT
+    global ACCELERATION, DECELERATION, FRICTION, TOP_SPEED, TOP_REV_SPEED
     for p in pAgents:
-        p.move(dt*0.1) #move towards target
+        p.move(dt*0.3) #move towards target
     for a in vAgents:
         down, up = a.current_direction
         #forwards and backwards
@@ -146,7 +147,6 @@ def update(dt):
                 a.clockwise = -a.clockwise #rotate in opposite direction
         a.changeAnchor(a.turn_anch_x, a.turn_anch_y) 
 
-
         #rotate vehicle
         a.deg_angle = (a.deg_angle - changedAngle)%360
         car_angle = math.radians(a.deg_angle)
@@ -178,19 +178,34 @@ def on_draw():
     
 ###################################################################
 
-UPDATE_FREQUENCY = 0.05 #updating state
-MAX_EP_LENGTH = 5/UPDATE_FREQUENCY
-ep_len = 0
 
 ###################EPISODE-RENDER##################################
+UPDATE_FREQUENCY = 0.05 #updating state
+MAX_EP_LENGTH = 5/UPDATE_FREQUENCY
+MAX_EPS = 1000 #run how many eps.
+
+ACTOR_EPSILON = 0.5 #GREEDY EXPLORATION
+MIN_EPSILON = 0.05
+EPSILON_DECAY = 0.99
+
+num_eps = 0 
+ep_len = 0
+running_reward = 10
+episode_rewards = [] #maintained over every episode (tracking purposes)
+running_averages = [] #same but for running_average
+ep_reward = 0 #cumulative reward for episode
+
 def calculate_reward(current_state):
     reward = 0
     if current_state[3] >=0: #encourage forward movement
-        reward += current_state[3]*2
+        normalized_velocity = current_state[3] / TOP_SPEED
+        #print("Normalized Velocity:", normalized_velocity)
+        reward += normalized_velocity
     return reward
 
 def envReset():
-    global vAgents, pAgents, ep_len, initVel, roads
+    global vAgents, pAgents, ep_len, initVel, roads, num_eps, ep_reward, running_reward, episode_rewards, running_averages, ACTOR_EPSILON
+    print("RESET")
     #vAgents = create New agents function ()
     vAgents.clear()
     pAgents.clear()
@@ -198,35 +213,150 @@ def envReset():
         vAgents.append(item.__deepcopy__(batch1, batch2))
     for item in startPAgents:
         pAgents.append(item.__deepcopy__(batch1))
-    print("RESET")
     for i, a in enumerate(vAgents):
         a.velocity = initVel[i]
         a.shape.rotation = initAngle[i]
     ep_len = 0
+    currentState = []
+    for a in vAgents:
+        currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity]
+
+    #update cumulative reward
+    running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward #exponential moving average
+    episode_rewards.append(ep_reward)
+    running_averages.append(running_reward)
+
+    #performing backpropagation
+    finish_episode()
+
+    num_eps += 1
+    #LOGGING
+    print("Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}".format(num_eps, ep_reward, running_reward))
+    ep_reward = 0
+    
+    #GREEDY EPSILON UPDATE
+    print("ACTOR EPSILON: ", ACTOR_EPSILON)
+    ACTOR_EPSILON = max(MIN_EPSILON, ACTOR_EPSILON*EPSILON_DECAY)
+
+    if num_eps >= MAX_EPS:
+        print("Completed training... DONE")
+        pyglet.app.exit()
+
 
 def envStep(dt):
-    global ep_len
-    done = False
+    global ep_len, ep_reward
     currentState = []
     current_reward = 0
     ep_len += 1
+
     for a in vAgents:
-        currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity]
+        currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity] #WILL CHANGE TO ARRAY OF ARRAYS FOR MULTI-AGENT
         current_reward = calculate_reward(currentState)
-        a.updateDirection(selectAction())
+        a.updateDirection(selectAction(currentState))
+        #print(f"STATE {currentState}, REWARD {current_reward}")
+    #cross reference to MAIN from actor_critic.py
+    model.rewards.append(current_reward)
+    ep_reward += current_reward
+
     if ep_len >= MAX_EP_LENGTH: #if exceeds max length or last part of road passed
         envReset()
-        done = True
-    return currentState, current_reward, done
-    #returns states of agents (array), actions taken (array), done (terminal flag) 
-def selectAction():
-    return 2 #forwards
+
+def selectAction(currentState):
+    currentState = np.array(currentState)
+    action = select_action(currentState) #A-C func
+    #print(f"ACTION: {action}")
+    return action #forwards
 ###################################################################
+
+#######A-C_NETWORK##########################
+
+OPTIM_LR = 0.03 #optimiser learning rate
+GAMMA = 0.99 #discount factor for future rewards
+
+#ONE DNN for both actor and critic
+class ActorCritic(nn.Module):
+    def __init__(self):
+        super(ActorCritic, self).__init__()
+        self.affine = nn.Linear(4, 128) #input fully connected layer
+        self.action_head = nn.Linear(128, 3) #actor output (3 OUTPUTS)
+        self.value_head = nn.Linear(128, 1) #critic output
+        #action & reward buffer
+        self.saved_actions = []
+        self.rewards = []
+
+    def forward(self, x): 
+        #forward pass for both actor and critic
+        x = F.relu(self.affine(x))
+        #actor output chooses action from state, probability distribution therefore softmax
+        action_prob = F.softmax(self.action_head(x), dim=-1)
+        #critic output evaluates being in state
+        state_values = self.value_head(x)
+        return action_prob, state_values
+
+model = ActorCritic()
+optimizer = optim.Adam(model.parameters(), lr=OPTIM_LR)
+eps = np.finfo(np.float32).eps.item() #epsilon, const to add numerical stability
+
+SavedAction = namedtuple('SavedAction', ['log_prob', 'value']) #store log prob of selected action and state value when action was taken -> used to compute loss for policy and value function (log_prob is used due to stability and policy gradient reasons)
+
+def select_action(state):
+
+    if np.random.rand() < ACTOR_EPSILON: #GREEDY EPSILON EXPLORATION
+        action = np.random.choice([0, 1, 2])
+        #print("RANDOM ACTION TAKEN: ", action)
+        return action
+
+    state = torch.from_numpy(state).float()
+    probs, state_value = model(state)
+    #create categorical distr over list of probabilities
+    #print("PROBS : ", probs)
+    m = Categorical(probs)
+    action = m.sample() #sampling allows us to select actions basd on probabilities
+    #save action to action buffer
+    model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+    return action.item() #forwards or backwards
+
+def finish_episode():
+    #code for training network -> calculate loss for actor and critic and then backpropagate
+    R = 0 #reward at timestep
+    saved_actions = model.saved_actions
+    policy_losses = [] #save actor losses
+    value_losses = [] #save critic losses
+    returns = [] #save true values of returns
+
+    for r in model.rewards[::-1]: #calculate discounted  (reverse order of timesteps)
+        R = r + GAMMA * R
+        returns.insert(0, R)
+    returns = torch.tensor(returns)
+    returns = (returns - returns.mean()) / (returns.std() + eps) #normalization of returns tensor -> to calculate advantage and help ensure consistent updates
+    
+    for (log_prob, value), R in zip(saved_actions, returns):
+        advantage = R - value.item() #advantage calculated as actual return (R) - critic's estimated value (value.item())
+        policy_losses.append(-log_prob * advantage) #actor loss (gradient ascent)
+        value_losses.append(F.smooth_l1_loss(value, torch.tensor([R]))) #critic loss via L1 smooth loss (Huber loss)
+    optimizer.zero_grad() #reset gradients
+    #TD learning, so sum up all policy and value losses calculated
+    loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
+    #perform backpropagation
+    loss.backward()
+    optimizer.step()
+    #reset buffers for next ep
+    del model.rewards[:]
+    del model.saved_actions[:]
+
+############MAIN#######################################
 
 pyglet.clock.schedule_interval(envStep, UPDATE_FREQUENCY/SPEED_UP)
 pyglet.clock.schedule(update)#call update function according to system refresh rate
 
 pyglet.app.run()
 
+import matplotlib.pyplot as plt
 
-
+plt.plot(episode_rewards, label='Reward per Episode')
+plt.plot(running_averages, label='Average Reward (Last 50 Episodes)')
+plt.xlabel('Episode')
+plt.ylabel('Reward')
+plt.title('Rewards and Average Rewards Over Episodes')
+plt.legend()
+plt.show()
