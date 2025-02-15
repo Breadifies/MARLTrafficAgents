@@ -64,7 +64,7 @@ startProads = [
     RoadTile(start_x = 500, start_y = WINDOW_HEIGHT//2, end_x = 550, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
     RoadTile(start_x = 550, start_y = WINDOW_HEIGHT//2, end_x = 600, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
     RoadTile(start_x = 600, start_y = WINDOW_HEIGHT//2, end_x = 650, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
-    RoadTile(start_x = 650, start_y = WINDOW_HEIGHT//2, end_x = 700, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2)
+    RoadTile(start_x = 650, start_y = WINDOW_HEIGHT//2, end_x = 800, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2)
 
 ]
 ###################################################################
@@ -97,6 +97,7 @@ for item in startPvAgents:
 for item in startPAgents:
     pAgents.append(item.__deepcopy__(batch1))
 
+#HIT_CHECKPOINT = False
 
 ###############PHYSICS RENDERING###################################
 def update(dt):
@@ -180,27 +181,25 @@ def on_draw():
 
 
 ###################EPISODE-RENDER##################################
-UPDATE_FREQUENCY = 0.05 #updating state
+UPDATE_FREQUENCY = 0.05 #HOW OFTEN AGENT UPDATES ITS STATE AND ACTION
 MAX_EP_LENGTH = 5/UPDATE_FREQUENCY
 MAX_EPS = 1000 #run how many eps.
-
-ACTOR_EPSILON = 0.5 #GREEDY EXPLORATION
+#GREEDY EXPLORATION
+ACTOR_EPSILON = 0.5 
 MIN_EPSILON = 0.05
 EPSILON_DECAY = 0.99
 
 num_eps = 0 
 ep_len = 0
-running_reward = 10
+running_reward = 0
 episode_rewards = [] #maintained over every episode (tracking purposes)
 running_averages = [] #same but for running_average
 ep_reward = 0 #cumulative reward for episode
 
 def calculate_reward(current_state):
     reward = 0
-    if current_state[3] >=0: #encourage forward movement
-        normalized_velocity = current_state[3] / TOP_SPEED
-        #print("Normalized Velocity:", normalized_velocity)
-        reward += normalized_velocity
+    reward += current_state[3]
+    
     return reward
 
 def envReset():
@@ -233,7 +232,6 @@ def envReset():
     #LOGGING
     print("Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}".format(num_eps, ep_reward, running_reward))
     ep_reward = 0
-    
     #GREEDY EPSILON UPDATE
     print("ACTOR EPSILON: ", ACTOR_EPSILON)
     ACTOR_EPSILON = max(MIN_EPSILON, ACTOR_EPSILON*EPSILON_DECAY)
@@ -251,9 +249,11 @@ def envStep(dt):
 
     for a in vAgents:
         currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity] #WILL CHANGE TO ARRAY OF ARRAYS FOR MULTI-AGENT
-        current_reward = calculate_reward(currentState)
-        a.updateDirection(selectAction(currentState))
-        #print(f"STATE {currentState}, REWARD {current_reward}")
+        #NORMALISE STATES IMPORTANT
+        nomCState = [currentState[0]/WINDOW_WIDTH, currentState[1]/WINDOW_HEIGHT, currentState[2]/360, currentState[3]/(TOP_SPEED + TOP_REV_SPEED)]
+        #print(f"NORM STATE {nomCState}")
+        current_reward = calculate_reward(nomCState)
+        a.updateDirection(selectAction(nomCState))
     #cross reference to MAIN from actor_critic.py
     model.rewards.append(current_reward)
     ep_reward += current_reward
@@ -270,7 +270,7 @@ def selectAction(currentState):
 
 #######A-C_NETWORK##########################
 
-OPTIM_LR = 0.03 #optimiser learning rate
+OPTIM_LR = 0.003 #optimiser learning rate # 0.003
 GAMMA = 0.99 #discount factor for future rewards
 
 #ONE DNN for both actor and critic
@@ -309,9 +309,10 @@ def select_action(state):
     state = torch.from_numpy(state).float()
     probs, state_value = model(state)
     #create categorical distr over list of probabilities
-    #print("PROBS : ", probs)
+    
     m = Categorical(probs)
     action = m.sample() #sampling allows us to select actions basd on probabilities
+    print(f"PROBS : {probs}, ACTION: {action}")
     #save action to action buffer
     model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
     return action.item() #forwards or backwards
