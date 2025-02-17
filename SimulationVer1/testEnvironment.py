@@ -137,8 +137,9 @@ def update(dt): #ensuring consistent framerate and game logic to be frame-rate i
                 #HITCHECKPOINT = True
 
             for i in range(a.num_vision_lines):
+                #IF road is not conta
                 if not road.line_end_on_road(a.Lines[i].x2, a.Lines[i].y2):
-                    #decrease the vision length until it is NOT on the road
+                    #decrease the vision length until it is NOT on the road (keep it)
                     a.lineLengths[i] = max(0, a.lineLengths[i] - 1)
                     a.updateLines()
                 elif not road.line_end_on_road(a.Lines[i].x, a.Lines[i].y):

@@ -8,6 +8,7 @@ class VehicleAgent:
         self.turn_anch_x = width // 4
         self.followF_anch_x = width / 1.5
         self.followB_anch_x = 2*self.turn_anch_x - self.followF_anch_x #backwards driving (center of rotation outside shape)
+        self.center_anch_x = width // 2 #anchor for center (vision lines)
         self.deg_angle = 0
         self.shape.anchor_position = self.turn_anch_x, self.turn_anch_y
 
@@ -19,9 +20,9 @@ class VehicleAgent:
 
         #vehicle vision line properties
         self.maxLen = 1.5*width
-        self.num_vision_lines = 6
+        self.num_vision_lines = 4
         self.Lines = []
-        self.Angles = [0, 45, -45, 180, 135, 215] #[0, 45, -45, 180, 135, 215]
+        self.Angles = [0, 20, -20, 180] #[0, 45, -45, 180, 135, 215]
         self.lineLengths = [self.maxLen]*self.num_vision_lines
         self.defineLines(x, y, batch2, self.Angles)
 
@@ -90,7 +91,7 @@ class VehicleAgent:
 class RoadTile:
     def __init__(self, start_x, start_y, end_x, end_y, width, color, batch1, batch2):
         self.roadShape = shapes.Line(start_x, start_y, end_x, end_y, width, color, batch=batch1) #shape
-        self.roadFollow = shapes.Line(start_x, start_y, end_x, end_y, 5, (255, 50, 50), batch=batch2) #line for vehicle to follow
+        self.roadFollow = shapes.Line(start_x, start_y, end_x, end_y, 5, (255, 210, 220), batch=batch2) #line for vehicle to follow
         self.roadCheckPoint = shapes.Line(end_x-5, end_y, end_x, end_y, width, (50, 255, 50), batch=batch2) #checkpoint rewards
         self.passed = False
 
@@ -127,6 +128,15 @@ class PedestrianAgent:
                     self.reached_end = True
         else:
             print("pedestrian reached target")
+
+    def is_on_ped(self, object_pos):
+        return object_pos in self.shape
+    def line_end_on_ped(self, x2, y2): #check for contact with vehicle
+        return self.is_on_ped((x2, y2))
+
+
+
+
 
     def __deepcopy__(self, renderBatch):
         # Create a new instance of PedestrianAgent
