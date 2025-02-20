@@ -206,9 +206,10 @@ UPDATE_FREQUENCY = 0.05 #HOW OFTEN AGENT UPDATES ITS STATE AND ACTION #0.05
 MAX_EP_LENGTH = 5/UPDATE_FREQUENCY 
 MAX_EPS = 1000 #run how many eps.
 #GREEDY EXPLORATION
-ACTOR_EPSILON = 0.5  #0.5
-MIN_EPSILON = 0.05 #0.05
-EPSILON_DECAY = 0.99 #0.99
+STARTING_EPSILON = 0.2 #0.5
+ACTOR_EPSILON = STARTING_EPSILON
+MIN_EPSILON = 0.01 #0.05
+EPSILON_DECAY = 0.95 #0.99
 
 num_eps = 0 
 ep_len = 0
@@ -224,22 +225,33 @@ runningS_averages = [] #same but for running_average
 safety_reward = 0
 
 
-
 def calculate_reward(current_state):
     #global HIT_CHECKPOINT
-    reward1 = 0
-    reward1 += current_state[3]
-    r1W = 0.5
     # if HIT_CHECKPOINT:
     #     reward += 10
     #     HIT_CHECKPOINT = False
+    reward1 = 0
+    reward1 += current_state[3]
+    r1W = 0.5
     reward2 = 0
     reward2 += current_state[4]
     r2W = 0.5
+    if reward2 == 1:#if no obstacles in vision
+        r1W = 1
+        r2W = 0
+    else:
+        r1W = 0
+        r2W = 1
+        reward2 = max(-10 * ((current_state[4] - 1) ** 2) + 1, -1) #adjusted reward range (-10, 1), quadratic function to penalise distances away from 1
+        print(f"CONTACT: {reward2}")
+    reward1 = r1W*reward1 + r2W*reward2 #linear scalarisation
     return [reward1, reward2]
 
 def envReset():
-    global vAgents, pAgents, ep_len, initVel, roads, num_eps, ep_reward, running_reward, episode_rewards, running_averages, safety_reward, runningS_reward, episodeS_rewards, runningS_averages, ACTOR_EPSILON
+    global vAgents, pAgents, ep_len, initVel, roads, num_eps
+    global ep_reward, running_reward, episode_rewards, running_averages
+    global safety_reward, runningS_reward, episodeS_rewards, runningS_averages
+    global ACTOR_EPSILON
     print("RESET")
     #vAgents = create New agents function ()
     vAgents.clear()
@@ -323,8 +335,8 @@ def selectAction(currentState):
 #######A-C_NETWORK##########################
 INPUTS = 5 #number of state inputs (x, y, angle, velocity, visionLength)
 
-OPTIM_LR = 0.003 #optimiser learning rate # 0.003
-GAMMA = 0.99 #discount factor for future rewards
+OPTIM_LR = 0.006 #optimiser learning rate # 0.006
+GAMMA = 0.80 #discount factor for future rewards #0.99
 
 #ONE DNN for both actor and critic
 class ActorCritic(nn.Module):
@@ -418,8 +430,24 @@ plt.xlabel('Episode')
 plt.ylabel('Reward')
 plt.title('Rewards and Average Rewards Over Episodes')
 
+# Adding the hyperparameters as a text box in the plot
+hyperparameters = f"""
+STARTING_EPSILON: {STARTING_EPSILON}
+EPSILON_DECAY: {EPSILON_DECAY}
+OPTIM_LR: {OPTIM_LR}
+GAMMA: {GAMMA}
+"""
+
+# Position the text box (adjust the coordinates as needed)
+plt.text(0.96, 0.5, hyperparameters, transform=plt.gca().transAxes,
+         fontsize=5, verticalalignment='top', horizontalalignment='right',
+         bbox=dict(facecolor='white', alpha=0.4, edgecolor='black', boxstyle='round,pad=0.3'))
+
+
 # Displaying the legend
 plt.legend()
 
 # Show the plot
 plt.show()
+
+#[ACTOR_EPSILON, EPSILON_DECAY, OPTIM_LR, GAMMA]

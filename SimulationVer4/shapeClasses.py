@@ -22,7 +22,7 @@ class VehicleAgent:
         self.maxLen = 1.5*width
         self.num_vision_lines = 4
         self.Lines = []
-        self.Angles = [0, 20, -20, 180] #[0, 45, -45, 180, 135, 215]
+        self.Angles = [0, 15, -15, 180] #[0, 45, -45, 180, 135, 215]
         self.lineLengths = [self.maxLen]*self.num_vision_lines
         self.defineLines(x, y, batch2, self.Angles)
 
@@ -92,14 +92,14 @@ class RoadTile:
     def __init__(self, start_x, start_y, end_x, end_y, width, color, batch1, batch2):
         self.roadShape = shapes.Line(start_x, start_y, end_x, end_y, width, color, batch=batch1) #shape
         self.roadFollow = shapes.Line(start_x, start_y, end_x, end_y, 5, (255, 210, 220), batch=batch2) #line for vehicle to follow
-        self.roadCheckPoint = shapes.Line(end_x-5, end_y, end_x, end_y, width, (50, 255, 50), batch=batch2) #checkpoint rewards
+        #self.roadCheckPoint = shapes.Line(end_x-5, end_y, end_x, end_y, width, (50, 255, 50), batch=batch2) #checkpoint rewards
         self.passed = False
 
     def is_on_road(self, object_pos): #check if vehicle on road shape
         return object_pos in self.roadShape
     def is_on_follow(self, object_pos): #check orientation matches on road
         return object_pos in self.roadFollow
-    def passed_checkpoint(self, object_pos): #check if vehicle on checkpoint
+   # def passed_checkpoint(self, object_pos): #check if vehicle on checkpoint
         if not self.passed:
             if object_pos in self.roadCheckPoint:
                 self.passed = True
