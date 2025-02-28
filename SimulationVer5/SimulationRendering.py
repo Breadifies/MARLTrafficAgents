@@ -157,11 +157,11 @@ def update(dt):
         #update vision cones
         for p in pAgents:
             coneStatus = a.is_on_cones(p.shape.x, p.shape.y)
-            for i in range(a.num_cones):
+            for i in range(a.num_tris):
                 if coneStatus[i]: #if on cone
-                    a.coneLengths[i] = max(0, a.coneLengths[i] - 1)
-                elif (a.coneLengths[i] < a.maxLenCone):
-                    a.coneLengths[i] = min(a.maxLenCone, a.coneLengths[i] + 1)
+                    a.triLengths[i] = max(0, a.triLengths[i] - 1)
+                elif (a.triLengths[i] < a.maxLenTri):
+                    a.triLengths[i] = min(a.maxLenTri, a.triLengths[i] + 1)
 
         # for p in pAgents:
         #     #check for vision line distance
@@ -169,10 +169,11 @@ def update(dt):
         #         if p.line_end_on_ped(a.Lines[i].x2, a.Lines[i].y2):
         #             a.lineLengths[i] = max(0, a.lineLengths[i] - 1)
         #         elif (a.lineLengths[i] < a.maxLen):
-        #             a.lineLengths[i] = min(a.maxLen, a.lineLengths[i] + 1)
+        #             a.lineLengths[i] = min(a.maxLen, a.lineLengths[i] + 1)    
                     
-
-        a.updateCones()
+        a.updateTris()
+        #a.updateCones()
+        
         a.changeAnchor(a.turn_anch_x, a.turn_anch_y) 
 
         #rotate vehicle
@@ -257,14 +258,19 @@ def calculate_reward(current_state):
     else:
         r1W = 0.5
         r2W = 0.5
-        reward2 = min(-10* ((current_state[4] - 1) ** 2) + 1, 1)#adjusted reward range (-10, 1), quadratic function to penalise distances away from 1
-        print(f"CONTACT: {reward2}")
+        if current_state[4] > 0.2: #implement piece-wise function
+            reward2 = current_state[4]**0.2  # x^0.2
+        elif current_state[4] > 0.05:
+            reward2 = 4.8*current_state[4] -0.24  # 4.8x - 0.24 
+        else:
+            reward2 = 0 # 0 < x < 0.05
+        print(f"CONTACT: {current_state[4]:.3f}, {reward2:.3f}")
     
     #TEMP FOR REWARD SHOWCASE
     efficiency_rewards.append(reward1)
-    safety_rewards.append(reward2)
-
+    safety_rewards.append(reward1)
     reward1 = r1W*reward1 + r2W*reward2 #linear scalarisation
+    
     return [reward1, reward2]
 
 def envReset():
@@ -325,14 +331,14 @@ def envStep(dt):
 
     for a in vAgents:
         visionLength = 0
-        for i in range(a.num_cones): 
-            visionLength += a.coneLengths[i]
-        visionLength = (visionLength/a.num_cones) #get average visionLengths from all lines
+        for i in range(a.num_tris): 
+            visionLength += a.triLengths[i]
+        visionLength = (visionLength/a.num_tris) #get average visionLengths from all lines
 
         currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity, visionLength] 
         #WILL CHANGE TO ARRAY OF ARRAYS FOR MULTI-AGENT
         #NORMALISE STATES IMPORTANT
-        nomCState = [currentState[0]/WINDOW_WIDTH, currentState[1]/WINDOW_HEIGHT, currentState[2]/360, currentState[3]/(TOP_SPEED + TOP_REV_SPEED), currentState[4]/(a.maxLenCone)]
+        nomCState = [currentState[0]/WINDOW_WIDTH, currentState[1]/WINDOW_HEIGHT, currentState[2]/360, currentState[3]/(TOP_SPEED + TOP_REV_SPEED), currentState[4]/(a.maxLenTri)]
         #print(f"NORM STATE {nomCState}")
         current_reward, dist_reward = calculate_reward(nomCState)
         a.updateDirection(selectAction(nomCState))
@@ -441,10 +447,10 @@ import matplotlib.pyplot as plt
 
 # Plotting Efficiency and Safety Rewards
 plt.plot(efficiency_rewards, label='Efficiency Reward', color='b') 
-plt.plot(safety_rewards, label='Safety Reward', color='r')
+plt.plot(safety_rewards, label='Safety Reward', color='g')
 
 # Adding labels and title
-plt.xlabel('Episode')
+plt.xlabel('Safety')
 plt.ylabel('Reward')
 plt.title('Efficiency and Safety Rewards Over Episodes')
 
