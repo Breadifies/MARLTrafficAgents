@@ -3,21 +3,24 @@ import numpy as np
 import math
 from pyglet import gl
 from shapeClasses import VehicleAgent, RoadTile, PedestrianAgent
-
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import os
 import torch.optim as optim
 from torch.distributions import Categorical
 from collections import namedtuple
 
 window = pyglet.window.Window(width=800, height=600, vsync=True)
 WINDOW_WIDTH, WINDOW_HEIGHT = window.get_size()
-
 batch = pyglet.graphics.Batch()
 batch_ = pyglet.graphics.Batch()
 batch1 = pyglet.graphics.Batch()
 batch2 = pyglet.graphics.Batch()
+
+
+
+
 
 ###################CONSTANTS#######################################
 ROAD_WIDTH = 20
@@ -25,35 +28,38 @@ ROAD_WIDTH = 20
 MU = 7 #1 meter = n pixels (based on vehicle width) (STANDARDIZED METER UNIT)
 CAR_LENGTH = MU*4.2 #21:9 ratio
 CAR_WIDTH = MU*1.8
-TOP_SPEED = MU*30
+TOP_SPEED = MU*30#MU*30
 TOP_REV_SPEED = TOP_SPEED/2
 ACCELERATION = MU*70
-DECELERATION = ACCELERATION * 2.5 #braking force is much stronger than accel
+DECELERATION = ACCELERATION * 5 #2.5 #braking force is much stronger than accel 
 FRICTION = MU*12 #friction coefficient
 
 SPEED_UP = 1 #speed up simulation (do not abouse, accumulate numerical errors, update missing and accuracy of physics)
 ###################################################################
 
 
+
+
+
 ###################CONSTRUCTING ROADS##############################
 # center_x = WINDOW_WIDTH // 2
 # center_y = WINDOW_HEIGHT // 2
 # radius = 150
-# num_tiles = 10
+# num_tiles = 20
 # angle_increment = 2 * math.pi / num_tiles
 startProads = [
-#     RoadTile(
-#         start_x=center_x+ radius * math.cos(angle_increment * i),
-#         start_y=center_y + radius * math.sin(angle_increment * i),
-#         end_x=center_x + radius * math.cos(angle_increment * (i + 1)),
-#         end_y=center_y + radius * math.sin(angle_increment * (i + 1)), 
-#         width=ROAD_WIDTH,
-#         color=(50, 50, 50),
-#         batch1=batch1,
-#         batch2 = batch2
-#     )
-#     for i in range(num_tiles)
-    RoadTile(start_x = -100, start_y = WINDOW_HEIGHT//2, end_x = 150, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
+    # RoadTile(
+    #     start_x=center_x+ radius * math.cos(angle_increment * i),
+    #     start_y=center_y + radius * math.sin(angle_increment * i),
+    #     end_x=center_x + radius * math.cos(angle_increment * (i + 1)),
+    #     end_y=center_y + radius * math.sin(angle_increment * (i + 1)), 
+    #     width=ROAD_WIDTH,
+    #     color=(50, 50, 50),
+    #     batch1=batch1,
+    #     batch2 = batch2
+    # )
+    # for i in range(num_tiles)
+    RoadTile(start_x = -400, start_y = WINDOW_HEIGHT//2, end_x = 150, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
     RoadTile(start_x = 150, start_y = WINDOW_HEIGHT//2, end_x = 200, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
     RoadTile(start_x = 200, start_y = WINDOW_HEIGHT//2, end_x = 250, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
     RoadTile(start_x = 250, start_y = WINDOW_HEIGHT//2, end_x = 300, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
@@ -64,36 +70,77 @@ startProads = [
     RoadTile(start_x = 500, start_y = WINDOW_HEIGHT//2, end_x = 550, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
     RoadTile(start_x = 550, start_y = WINDOW_HEIGHT//2, end_x = 600, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
     RoadTile(start_x = 600, start_y = WINDOW_HEIGHT//2, end_x = 650, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2),
-    RoadTile(start_x = 650, start_y = WINDOW_HEIGHT//2, end_x = 800, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2)
+    RoadTile(start_x = 650, start_y = WINDOW_HEIGHT//2, end_x = 3000, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch1, batch2=batch2)
+    # Horizontal main road
+    # RoadTile(start_x=0, start_y=WINDOW_HEIGHT // 2, 
+    #          end_x=1000, end_y=WINDOW_HEIGHT // 2, 
+    #          width=ROAD_WIDTH, color=(50, 50, 50), 
+    #          batch1=batch1, batch2=batch2),
+    # RoadTile(start_x=0, start_y=WINDOW_HEIGHT // 2 + 15, 
+    #          end_x=1000, end_y=WINDOW_HEIGHT // 2 + 15, 
+    #          width=ROAD_WIDTH, color=(50, 50, 50), 
+    #          batch1=batch1, batch2=batch2),
+    # # Vertical connecting road (middle of main road)
+    # RoadTile(start_x=400, start_y=0, 
+    #          end_x=400, end_y=WINDOW_HEIGHT // 2, 
+    #          width=ROAD_WIDTH, color=(50, 50, 50), 
+    #          batch1=batch1, batch2=batch2)
 
 ]
 ###################################################################
 
 
+
+
+
 ###################CONSTRUCTING AGENTS#############################
 startPvAgents = [
-    # VehicleAgent(x=400, y=150, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=300, y=410, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2),
     # VehicleAgent(x=400, y=450, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2),
-    # VehicleAgent(x=250, y=310, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2),
-    # VehicleAgent(x=550, y=310, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2)
+    # VehicleAgent(x=450, y=410, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2),
+    # VehicleAgent(x=540, y=310, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch2)
     VehicleAgent(x=120, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch_),
     # VehicleAgent(x=50, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch_),
     # VehicleAgent(x=100, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch_),
     # VehicleAgent(x=150, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch_),
     # VehicleAgent(x=200, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch_),
-    # VehicleAgent(x=250, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch_)
+    # VehicleAgent(x=250, y=300, width=CAR_LENGTH, height=CAR_WIDTH, color=(200, 225, 90), batch1=batch, batch2=batch_),
+# Vehicle moving UP the T-section (vertical road)
+    # VehicleAgent(x=390, y=0, 
+    #              height=CAR_WIDTH, width=CAR_LENGTH, 
+    #              color=(200, 225, 90), batch1=batch, batch2=batch_),   
+    # # Vehicle moving ACROSS the T-section (horizontal road)
+    # VehicleAgent(x=0, y=WINDOW_HEIGHT // 2,
+    #              height=CAR_WIDTH, width=CAR_LENGTH, 
+    #              color=(200, 225, 90), batch1=batch, batch2=batch_), 
+    # VehicleAgent(x=950, y=WINDOW_HEIGHT // 2,
+    #              height=CAR_WIDTH, width=CAR_LENGTH, 
+    #              color=(200, 225, 90), batch1=batch, batch2=batch_)    
     ]
 initVel = [0]*len(startPvAgents)
 initAngle = [0]*len(startPvAgents)
 ###################################################################
 
 
+
+
+
 #################CONSTRUCTINGPEDESTRIANS#############################
 startPAgents = [
-    PedestrianAgent(x=400, y=400, target_x = 400, target_y = 200, radius=10, color=(0, 0, 100), batch=batch)
+    # PedestrianAgent(x=450, y=400, target_x = 450, target_y = 200, radius=10, color=(0, 0, 100), batch=batch),
+    # PedestrianAgent(x=300, y=400, target_x = 300, target_y = 200, radius=10, color=(0, 0, 100), batch=batch)
+    PedestrianAgent(x=400, y=400, target_x = 400, target_y = 200, radius=10, color=(0, 0, 255), batch=batch)
+    # PedestrianAgent(x=365, y=WINDOW_HEIGHT // 2 + 50, 
+    #                 target_x=365, target_y=WINDOW_HEIGHT // 2 - 100, 
+    #                 radius=10, color=(0, 0, 255), batch=batch)
 ]
 ###################################################################
 
+
+
+
+
+#################INITIALISE###########################################
 roads = startProads
 vAgents = []
 pAgents = []
@@ -101,14 +148,24 @@ for item in startPvAgents:
     vAgents.append(item.__deepcopy__(batch1, batch2))
 for item in startPAgents:
     pAgents.append(item.__deepcopy__(batch1))
+###################################################################
+
+
+
+
 
 #HIT_CHECKPOINT = False
 ###############PHYSICS RENDERING###################################
 def update(dt):
     dt = dt * SPEED_UP
     global ACCELERATION, DECELERATION, FRICTION, TOP_SPEED, TOP_REV_SPEED
-    for p in pAgents:
-        p.move(dt*0.35) #move towards target
+    for index, p in enumerate(pAgents):
+        # if index == 0:
+        #     p.move(dt*0.2) #move towards target
+        # if index == 1:
+        #     p.move(dt*0.35)
+        p.move(dt*0.45)
+
     for a in vAgents:
         down, up = a.current_direction
         #forwards and backwards
@@ -138,35 +195,51 @@ def update(dt):
                 if road.is_on_road(a.shape.position):
                     a.curRoad = road
         
-        changedAngle = 0 #final angle change post-successful orient
+        a.changedAngle = 0 #final angle change post-successful orient
         if a.curRoad and not onFollow: #if on a road, check orientation
             if a.curRoad.is_on_follow(a.shape.position):
                 onFollow = True
                 a.increment = 0
             else: #not oriented correctly -> ROTATE
-                a.increment += 5 #sweep angle outwards till orient found
+                a.increment += 10 #sweep angle outwards till orient found
                 a.changeAnchor(a.turn_anch_x, a.turn_anch_y)#rotate based on c.o.r
-                changedAngle += a.clockwise*a.increment
+                a.changedAngle += a.clockwise*a.increment
                 a.shape.rotation += a.clockwise*a.increment
                 a.changeAnchor(followAnchor, a.turn_anch_y) #reset anchor to follow anchor
                 a.clockwise = -a.clockwise #rotate in opposite direction
     
         a.changeAnchor(a.center_anch_x, a.turn_anch_y) 
 
-        for p in pAgents:
-            #check for vision line distance
-            for i in range(a.num_vision_lines):
-                if p.line_end_on_ped(a.Lines[i].x2, a.Lines[i].y2):
-                    a.lineLengths[i] = max(0, a.lineLengths[i] - 1)
-                elif (a.lineLengths[i] < a.maxLen):
-                    a.lineLengths[i] = min(a.maxLen, a.lineLengths[i] + 1)
-                    
 
-        a.updateLines() 
+        #update vision cones
+        checkContact = [False]*a.num_tris #represents each individual status of cone, resets to false each time
+        for p in pAgents:
+            coneStatus = a.is_on_cones(p.shape.x, p.shape.y) #returns a tuple of each vision cone's status
+            for i in range(len(coneStatus)): #for every vision cone
+                if coneStatus[i]:
+                    checkContact[i] = True #IF ANY in contact then set that to true
+
+        for i in range(a.num_tris):
+            if checkContact[i]: #if any ped on cone   # getting False then true
+                a.triLengths[i] = max(0, a.triLengths[i] - 3)
+            elif (a.triLengths[i] < a.maxLenTri):
+                a.triLengths[i] = min(a.maxLenTri, a.triLengths[i] + 3)
+
+        # for p in pAgents:
+        #     #check for vision line distance
+        #     for i in range(a.num_vision_lines):
+        #         if p.line_end_on_ped(a.Lines[i].x2, a.Lines[i].y2):
+        #             a.lineLengths[i] = max(0, a.lineLengths[i] - 1)
+        #         elif (a.lineLengths[i] < a.maxLen):
+        #             a.lineLengths[i] = min(a.maxLen, a.lineLengths[i] + 1)    
+                    
+        a.updateTris()
+        #a.updateCones()
+        
         a.changeAnchor(a.turn_anch_x, a.turn_anch_y) 
 
         #rotate vehicle
-        a.deg_angle = (a.deg_angle - changedAngle)%360
+        a.deg_angle = (a.deg_angle - a.changedAngle)%360
         car_angle = math.radians(a.deg_angle)
         a.shape.x += a.velocity * dt * math.cos(car_angle)
         a.shape.y += a.velocity * dt * math.sin(car_angle)
@@ -190,28 +263,53 @@ def update(dt):
 ###################################################################
 
 
-###################DRAWTOSCREEN####################################
-@window.event
-def on_draw():
-    gl.glClearColor(1, 1, 1, 1.0)
-    window.clear()
-    batch1.draw()
-    batch2.draw()
-    
-###################################################################
 
 
-###################EPISODE-RENDER##################################
-UPDATE_FREQUENCY = 0.05 #HOW OFTEN AGENT UPDATES ITS STATE AND ACTION #0.05
-MAX_EP_LENGTH = 5/UPDATE_FREQUENCY 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###################EPISODE-RENDER####################################################
+UPDATE_FREQUENCY = (1/60) #HOW OFTEN AGENT UPDATES ITS STATE AND ACTION #0.05
+MAX_EP_LENGTH = 3.5/UPDATE_FREQUENCY  
 MAX_EPS = 1000 #run how many eps.
 #GREEDY EXPLORATION
-STARTING_EPSILON = 0.2 #0.5
+STARTING_EPSILON = 0.5 #0.5
 ACTOR_EPSILON = STARTING_EPSILON
-MIN_EPSILON = 0.01 #0.05
+MIN_EPSILON = 0.05 #0.05
 EPSILON_DECAY = 0.95 #0.99
 
-num_eps = 0 
+num_eps = 1
 ep_len = 0
 
 running_reward = 0
@@ -224,27 +322,43 @@ episodeS_rewards = [] #maintained over every episode (tracking purposes)
 runningS_averages = [] #same but for running_average
 safety_reward = 0
 
+#TEMP SHOWCASING REWARD FUNCTION ACTIVATION
+efficiency_rewards = []
+safety_rewards = []
+
+saveModel = False
+loadModel = False
+
 
 def calculate_reward(current_state):
     #global HIT_CHECKPOINT
     # if HIT_CHECKPOINT:
     #     reward += 10
     #     HIT_CHECKPOINT = False
+    r1W = 0.5
+    r2W = 0.5
     reward1 = 0
     reward1 += current_state[3]
-    r1W = 0.5
     reward2 = 0
     reward2 += current_state[4]
-    r2W = 0.5
     if reward2 == 1:#if no obstacles in vision
         r1W = 1
         r2W = 0
     else:
-        r1W = 0
-        r2W = 1
-        reward2 = max(-10 * ((current_state[4] - 1) ** 2) + 1, -1) #adjusted reward range (-10, 1), quadratic function to penalise distances away from 1
-        print(f"CONTACT: {reward2}")
+        r1W = 0.05
+        r2W = 0.95
+        if current_state[4] > 0.5: #implement > 0.2 piece-wise function
+            reward2 = current_state[4]**0.2 # x^0.2
+        elif current_state[4] > 0.05:
+            reward2 = 1.94*current_state[4] - 0.1  # 4.8x - 0.24 
+        else:   
+            reward2 = 0 # 0 < x < 0.05
+        reward2 *= 1  
+    #TEMP FOR REWARD SHOWCASE
+    efficiency_rewards.append(reward1)
+    safety_rewards.append(reward2)
     reward1 = r1W*reward1 + r2W*reward2 #linear scalarisation
+    #print(f"REWARD1: {reward1}, REW2: {reward2}")
     return [reward1, reward2]
 
 def envReset():
@@ -291,10 +405,21 @@ def envReset():
     print("ACTOR EPSILON: ", ACTOR_EPSILON)
     ACTOR_EPSILON = max(MIN_EPSILON, ACTOR_EPSILON*EPSILON_DECAY)
 
-    if num_eps >= MAX_EPS:
+    if num_eps >= MAX_EPS: #MAX_EPS
         print("Completed training... DONE")
+        if saveModel:
+            save_model(model)
         pyglet.app.exit()
 
+    statUpdates() #execute statistical updates
+
+#check for if window is closed prematurely
+def on_close():
+    print("Window closed by user")
+    if saveModel:
+        save_model(model)
+    pyglet.app.exit() 
+window.push_handlers(on_close=on_close)
 
 def envStep(dt):
     global ep_len, ep_reward, safety_reward
@@ -305,14 +430,19 @@ def envStep(dt):
 
     for a in vAgents:
         visionLength = 0
-        for i in range(a.num_vision_lines): 
-            visionLength += a.lineLengths[i]
-        visionLength = (visionLength/a.num_vision_lines) #get average visionLengths from all lines
+        for i in range(a.num_tris): 
+            visionLength += a.triLengths[i]
+        visionLength = (visionLength/a.num_tris) #get average visionLengths from all lines
 
         currentState = [a.shape.x, a.shape.y, a.deg_angle, a.velocity, visionLength] 
         #WILL CHANGE TO ARRAY OF ARRAYS FOR MULTI-AGENT
         #NORMALISE STATES IMPORTANT
-        nomCState = [currentState[0]/WINDOW_WIDTH, currentState[1]/WINDOW_HEIGHT, currentState[2]/360, currentState[3]/(TOP_SPEED + TOP_REV_SPEED), currentState[4]/(a.maxLen)]
+        nomVelocity = 0
+        if currentState[3] > 0: #normalise velocity dependent on direction, ensure that max efficiency matches max safety
+            nomVelocity = (currentState[3]/TOP_SPEED)/2 + 0.5
+        else:
+            nomVelocity = (currentState[3]/TOP_REV_SPEED)/2 + 0.5
+        nomCState = [currentState[0]/WINDOW_WIDTH, currentState[1]/WINDOW_HEIGHT, currentState[2]/360, nomVelocity, currentState[4]/(a.maxLenTri)]
         #print(f"NORM STATE {nomCState}")
         current_reward, dist_reward = calculate_reward(nomCState)
         a.updateDirection(selectAction(nomCState))
@@ -328,15 +458,41 @@ def selectAction(currentState):
     currentState = np.array(currentState)
     action = select_action(currentState) #A-C func
     #print(f"ACTION: {action}")
-    #action = 2 #forwards automatically
+    action = 2 #forwards automatically
     return action #forwards
-###################################################################
+#####################################################################################
 
-#######A-C_NETWORK##########################
+#################DEFINING_MODELS##############################################
+
+def save_model(model):
+    torch.save(model.state_dict(), 'saved_models/actor_critic.pth')
+    print("Model saved to 'saved_models/model.pth'")
+
+def load_model(model):
+    model_path = 'saved_models/actor_critic.pth'
+    if os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path))
+        print(f"Model loaded from '{model_path}'")
+    else:
+        print(f"Model not found, training from scratch")
+
+############################################################################
+
+
+
+
+
+#######A-C_NETWORK##########################################################
 INPUTS = 5 #number of state inputs (x, y, angle, velocity, visionLength)
 
 OPTIM_LR = 0.006 #optimiser learning rate # 0.006
-GAMMA = 0.80 #discount factor for future rewards #0.99
+GAMMA = 0.95 #discount factor for future rewards #0.95
+
+#GRAPHING AGENT POLICY
+actionProbs = []
+totalAP = []
+criticValue = []
+totalCV = []
 
 #ONE DNN for both actor and critic
 class ActorCritic(nn.Module):
@@ -359,13 +515,19 @@ class ActorCritic(nn.Module):
         return action_prob, state_values
 
 model = ActorCritic()
+
+if loadModel:
+    load_model(model)
+
 optimizer = optim.Adam(model.parameters(), lr=OPTIM_LR)
 eps = np.finfo(np.float32).eps.item() #epsilon, const to add numerical stability
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value']) #store log prob of selected action and state value when action was taken -> used to compute loss for policy and value function (log_prob is used due to stability and policy gradient reasons)
 
 def select_action(state):
-
+    global num_eps, ACTOR_EPSILON
+    if num_eps%100 == 0: #periodically reset greedy epsilon
+        ACTOR_EPSILON = 0.5
     if np.random.rand() < ACTOR_EPSILON: #GREEDY EPSILON EXPLORATION
         action = np.random.choice([0, 1, 2])
         #print("RANDOM ACTION TAKEN: ", action)
@@ -374,10 +536,17 @@ def select_action(state):
     state = torch.from_numpy(state).float()
     probs, state_value = model(state)
     #create categorical distr over list of probabilities
-    
+    #print(f"STATEVAL: {state_value}")
     m = Categorical(probs)
-    action = m.sample() #sampling allows us to select actions basd on probabilities
-    print(f"PROBS : {probs}, ACTION: {action}")
+    action = m.sample() #sampling allows us to select actions based on probabilities
+    #print(f"PROBS : {probs}, ACTION: {action}")
+
+    #GRAPHING AGENT POLICY
+    actionProbs.append(probs)
+    criticValue.append(state_value)
+    totalAP.append(probs)
+    totalCV.append(state_value)
+
     #save action to action buffer
     model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
     return action.item() #forwards or backwards
@@ -400,6 +569,7 @@ def finish_episode():
         advantage = R - value.item() #advantage calculated as actual return (R) - critic's estimated value (value.item())
         policy_losses.append(-log_prob * advantage) #actor loss (gradient ascent)
         value_losses.append(F.smooth_l1_loss(value, torch.tensor([R]))) #critic loss via L1 smooth loss (Huber loss)
+        #criticValue.append(value_losses)
     optimizer.zero_grad() #reset gradients
     #TD learning, so sum up all policy and value losses calculated
     loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
@@ -409,16 +579,140 @@ def finish_episode():
     #reset buffers for next ep
     del model.rewards[:]
     del model.saved_actions[:]
+#####################################################################################
 
-############MAIN#######################################
+
+
+
+
+###############STAT_TRACKING###############################################
+
+def statUpdates():
+    episode_label.text = f'Episode: {num_eps}'
+    update_graph()
+
+#statistics for simulation tracking
+episode_label = pyglet.text.Label( 
+    f'Episode: {num_eps}',
+    font_name='Arial',
+    font_size=14,
+    x=WINDOW_WIDTH - 10,  # Position near the top right corner
+    y=WINDOW_HEIGHT - 10,
+    anchor_x='right',
+    anchor_y='top',
+    color=(0, 0, 0, 255)  # Black color
+)
+
+#########################################################################################
+
+
+
+
+
+############MAIN################################################################
 
 pyglet.clock.schedule_interval(envStep, UPDATE_FREQUENCY/SPEED_UP)
 pyglet.clock.schedule(update)#call update function according to system refresh rate
 
-pyglet.app.run()
+################################################################################
+
+
+
+
+
+############GRAPHING#################################################################
 
 import matplotlib.pyplot as plt
-# Plotting the main data
+import matplotlib.animation as animation
+from PIL import Image
+
+graph_window = pyglet.window.Window(width=800, height=600, caption="Graph Window")
+
+cached_pyglet_image = None
+
+def update_graph():
+    global cached_pyglet_image
+    ax1.cla()
+    ax2.cla()
+    if actionProbs:
+        probs = torch.stack(actionProbs).detach().numpy()
+        ax1.stackplot(range(probs.shape[0]), probs.T, labels=['Coast', 'Brake', 'Accelerate'], colors=['#FF6666', '#66FF66', '#6666FF'], edgecolor='black')
+        ax1.set_xlabel('Step')
+        ax1.set_ylabel('Probability')
+        ax1.set_title("Action Probability")
+        ax1.legend(loc='upper left')
+    if criticValue:
+        losses = torch.stack(criticValue).detach().numpy()
+        ax2.plot(range(losses.shape[0]), losses, color='black')
+        ax2.set_xlabel('Step')
+        ax2.set_ylabel('Loss')
+        ax2.set_title("Critic Losses")
+        ax2.set_ylim(-2, 2)
+    fig.tight_layout()
+    fig.canvas.draw()
+    buf = fig.canvas.tostring_argb()
+    width, height = fig.canvas.get_width_height()
+    cached_pyglet_image = pyglet.image.ImageData(width, height, 'RGBA', buf, pitch=-4 * width)
+
+    actionProbs.clear()
+    criticValue.clear()
+    ax1.set_xlim(left=0)  # Reset the x-axis to start from 0
+    ax2.set_xlim(left=0)  # Reset the x-axis to start from 0
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4)) 
+
+@graph_window.event
+def on_draw():
+    gl.glClearColor(1, 1, 1, 1.0)
+    graph_window.clear()
+
+    global cached_pyglet_image
+    if cached_pyglet_image:
+        x = (graph_window.width - cached_pyglet_image.width) // 2
+        y = (graph_window.height - cached_pyglet_image.height) // 2
+        cached_pyglet_image.blit(x, y)
+
+################################################################
+
+
+
+
+
+
+###################DRAWTOSCREEN####################################
+@window.event
+def on_draw():
+    gl.glClearColor(1, 1, 1, 1.0)
+    window.clear()
+
+    # Draw the Simulation
+    batch1.draw()
+    #batch2.draw()
+    episode_label.draw()
+
+@graph_window.event
+def on_draw():
+    gl.glClearColor(1, 1, 1, 1.0)
+    graph_window.clear()
+
+    global cached_pyglet_image
+    if cached_pyglet_image:
+        x = (graph_window.width - cached_pyglet_image.width) // 2
+        y = (graph_window.height - cached_pyglet_image.height) // 2
+        cached_pyglet_image.blit(x, y)
+###################################################################
+
+pyglet.app.run()
+
+
+
+
+
+
+####################POST-SIMULATION PLOTTING############################################
+plt.close() #close old plots
+
+# Plotting the main data -> OVER EVERY EPOCH
 plt.plot(episode_rewards, label='Reward per Episode', color='b') 
 plt.plot(running_averages, label='Average Reward (Last 50 Episodes)', color='g')
 
@@ -443,11 +737,50 @@ plt.text(0.96, 0.5, hyperparameters, transform=plt.gca().transAxes,
          fontsize=5, verticalalignment='top', horizontalalignment='right',
          bbox=dict(facecolor='white', alpha=0.4, edgecolor='black', boxstyle='round,pad=0.3'))
 
-
-# Displaying the legend
 plt.legend()
 
-# Show the plot
+if saveModel: #if saving model then save the plot
+    output_dir = 'saved_models'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    print("Saving plot to 'saved_models/rewards_plot.png'")
+    plt.savefig(f'{output_dir}/rewards_plot.png') #save plot as png
+
 plt.show()
 
-#[ACTOR_EPSILON, EPSILON_DECAY, OPTIM_LR, GAMMA]
+
+# Plotting totalAP
+totalActionProbs = torch.stack(totalAP).detach().numpy()
+fig, ax1 = plt.subplots(figsize=(8, 5))  # Create a figure and axis
+ax1.stackplot(
+    range(totalActionProbs.shape[0]),  # X-axis range
+    totalActionProbs.T,  # Transpose for correct shape
+    labels=['Coast', 'Brake', 'Accelerate'],
+    colors=['#FF6666', '#66FF66', '#6666FF'],
+    edgecolor='black'
+)
+ax1.set_xlabel('Step')
+ax1.set_ylabel('Probability')
+ax1.set_title("Action Probability")
+ax1.legend(loc='upper left')
+
+if save_model: #if saving model then save the plot
+    print("Saving plot to 'saved_models/actionProbs_plot.png'")
+    plt.savefig(f'{output_dir}/actionProbs_plot.png') #save plot as png
+
+plt.show()
+
+# Plotting totalCV
+losses = torch.stack(totalCV).detach().numpy()
+fig, ax2 = plt.subplots(figsize=(8, 5))  # Create a figure and axis
+ax2.plot(range(losses.shape[0]), losses, color='black')
+ax2.set_xlabel('Step')
+ax2.set_ylabel('Loss')
+ax2.set_title("Critic Losses")
+ax2.set_ylim(-2, 2)
+
+if saveModel: #if saving model then save the plot
+    print("Saving plot to 'saved_models/totalCV_plot.png'")
+    plt.savefig(f'{output_dir}/totalCV_plot.png') #save plot as png
+
+plt.show()

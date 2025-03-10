@@ -275,7 +275,7 @@ UPDATE_FREQUENCY = (1/60) #HOW OFTEN AGENT UPDATES ITS STATE AND ACTION #0.05
 MAX_EP_LENGTH = 3.5/UPDATE_FREQUENCY  
 MAX_EPS = 1000 #run how many eps.
 #GREEDY EXPLORATION
-STARTING_EPSILON = 0.5 #0.5
+STARTING_EPSILON = 0.05 #0.5
 ACTOR_EPSILON = STARTING_EPSILON
 MIN_EPSILON = 0.05 #0.05
 EPSILON_DECAY = 0.95 #0.99
@@ -298,7 +298,7 @@ efficiency_rewards = []
 safety_rewards = []
 
 saveModel = False
-loadModel = False
+loadModel = True
 
 
 def calculate_reward(current_state):
@@ -535,7 +535,6 @@ def finish_episode():
         returns.insert(0, R)
     returns = torch.tensor(returns)
     returns = (returns - returns.mean()) / (returns.std() + eps) #normalization of returns tensor -> to calculate advantage and help ensure consistent updates
-    
     for (log_prob, value), R in zip(saved_actions, returns):
         advantage = R - value.item() #advantage calculated as actual return (R) - critic's estimated value (value.item())
         policy_losses.append(-log_prob * advantage) #actor loss (gradient ascent)
@@ -658,7 +657,7 @@ def on_draw():
 
     # Draw the Simulation
     batch1.draw()
-    #batch2.draw()
+    batch2.draw()
     episode_label.draw()
 
 @graph_window.event
@@ -736,6 +735,9 @@ ax1.set_title("Action Probability")
 ax1.legend(loc='upper left')
 
 if save_model: #if saving model then save the plot
+    output_dir = 'saved_models'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     print("Saving plot to 'saved_models/actionProbs_plot.png'")
     plt.savefig(f'{output_dir}/actionProbs_plot.png') #save plot as png
 
@@ -751,6 +753,9 @@ ax2.set_title("Critic Losses")
 ax2.set_ylim(-2, 2)
 
 if saveModel: #if saving model then save the plot
+    output_dir = 'saved_models'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     print("Saving plot to 'saved_models/totalCV_plot.png'")
     plt.savefig(f'{output_dir}/totalCV_plot.png') #save plot as png
 

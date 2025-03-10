@@ -68,11 +68,23 @@ roads = [
     # )
     # for i in range(num_tiles)
     RoadTile(start_x = 10, start_y = WINDOW_HEIGHT//2, end_x = 200, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 200, start_y = WINDOW_HEIGHT//2, end_x = 300, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 300, start_y = WINDOW_HEIGHT//2, end_x = 400, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 400, start_y = WINDOW_HEIGHT//2, end_x = 500, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 500, start_y = WINDOW_HEIGHT//2, end_x = 600, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
-    RoadTile(start_x = 600, start_y = WINDOW_HEIGHT//2, end_x = 700, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2)
+    # RoadTile(start_x = 200, start_y = WINDOW_HEIGHT//2, end_x = 300, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    # RoadTile(start_x = 300, start_y = WINDOW_HEIGHT//2, end_x = 400, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    # RoadTile(start_x = 400, start_y = WINDOW_HEIGHT//2, end_x = 500, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    # RoadTile(start_x = 500, start_y = WINDOW_HEIGHT//2, end_x = 600, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    # RoadTile(start_x = 600, start_y = WINDOW_HEIGHT//2, end_x = 700, end_y = WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2)
+    RoadTile(start_x=200, start_y=WINDOW_HEIGHT//2, end_x=250, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=250, start_y=WINDOW_HEIGHT//2, end_x=300, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=300, start_y=WINDOW_HEIGHT//2, end_x=350, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=350, start_y=WINDOW_HEIGHT//2, end_x=400, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=400, start_y=WINDOW_HEIGHT//2, end_x=450, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=450, start_y=WINDOW_HEIGHT//2, end_x=500, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+
+    RoadTile(start_x=500, start_y=WINDOW_HEIGHT//2, end_x=550, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=550, start_y=WINDOW_HEIGHT//2, end_x=600, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=600, start_y=WINDOW_HEIGHT//2, end_x=650, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2),
+    RoadTile(start_x=650, start_y=WINDOW_HEIGHT//2, end_x=700, end_y=WINDOW_HEIGHT//2, width=ROAD_WIDTH, color=(50, 50, 50), batch1=batch, batch2=batch2)
+
 
 ]
 ###################################################################

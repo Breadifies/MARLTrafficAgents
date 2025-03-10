@@ -11,7 +11,6 @@ class VehicleAgent:
         self.followB_anch_x = 2*self.turn_anch_x - self.followF_anch_x #backwards driving (center of rotation outside shape)
         self.center_anch_x = width // 2 #anchor for center (vision lines)
         self.deg_angle = 0
-        self.changedAngle = 0 #for rotating vision cones
         self.shape.anchor_position = self.turn_anch_x, self.turn_anch_y
 
         #vehicle movement properties
@@ -20,28 +19,19 @@ class VehicleAgent:
         self.isControlled = isControlled
         self.current_direction = [0, 0] #input direction
 
-        self.maxLenTri = 10*width #10*
-        self.Tris = []
-        self.triAngle = [30] #determines the width of the triangle cone
-        self.startAnglesTris = [self.triAngle[0]/2]
-        self.num_tris = len(self.triAngle)
-        self.triLengths = [self.maxLenTri]*self.num_tris
-        self.defineTris(x, y, batch2)
+        #vehicle vision line properties
+        self.maxLen = 2*width #1.5*width
+        self.Lines = []
+        self.Angles = [0, 5, -5, 15, -15, 30, -30, 45, -45, 180] #[0, 45, -45, 180]
+        self.num_vision_lines = len(self.Angles) #4
+        self.lineLengths = [self.maxLen]*self.num_vision_lines
+        self.defineLines(x, y, batch2, self.Angles)
 
         #vehicle follow road properties
         self.curRoad = None #road segment currently on
         self.increment = 0 #rotation search for line
-        self.clockwise = 1   
+        self.clockwise = 1 
     
-        #vehicle vision (sector) properties
-        # self.maxLenCone = 3*width
-        # self.Cones = []
-        # self.coneWidth = [30]
-        # self.startAnglesCones = [self.coneWidth[0]/2]
-        # self.num_cones = len(self.coneWidth)
-        # self.coneLengths = [self.maxLenCone]*self.num_cones
-        # self.defineCones(x, y, batch2)
-
     def updateDirection(self, action): #change input direction after a certain no. timesteps
         self.current_direction = self.getDirection(action)
 
@@ -68,57 +58,29 @@ class VehicleAgent:
         #update anchor position
         self.shape.anchor_position = (anch_x, anch_y)
 
-    # def defineCones(self, x, y, batch): #create vehicle vision cones
-    #     for i in range(self.num_cones):
-    #         cone = shapes.Sector(x=x, y=y, radius=self.maxLenCone, angle=self.coneWidth[i], start_angle=self.deg_angle - self.startAnglesCones[i], color=(255, 0, 0, 100), batch=batch)
-    #         self.Cones.append(cone)
-    # def updateCones(self):
-    #     for i in range(self.num_cones):
-    #         self.Cones[i].x = self.shape.x
-    #         self.Cones[i].y = self.shape.y
-    #         self.Cones[i].radius = self.coneLengths[i]
-    #         self.Cones[i].rotation = self.deg_angle/2 #don't know why its this value
-
-    def defineTris(self, x, y, batch):  # Create vehicle vision triangles
-        car_angle = math.radians(self.deg_angle)
-        for i in range(self.num_tris):
-            half_width = math.tan(math.radians(self.triAngle[i])) * self.triLengths[i] 
-            height = self.triLengths[i]
-            tri = shapes.Triangle(
+    def defineLines(self, x, y, batch, angles): #create vehicle vision lines
+        for i in range(self.num_vision_lines):
+            car_angle = math.radians(self.deg_angle)
+            line = shapes.Line(
                 x, y, 
-                x + half_width * math.cos(car_angle + math.radians(90)),
-                y + height + half_width * math.sin(car_angle + math.radians(90)), 
-                x - half_width * math.cos(car_angle + math.radians(90)),
-                y + height - half_width * math.sin(car_angle + math.radians(90)),
-                color=(255, 0, 0, 100),  # Set color (green here, adjust as needed)
-                batch=batch
-            )
-            self.Tris.append(tri)
-
-    def updateTris(self): #update vehicle vision triangles manually
-        car_angle = math.radians(self.deg_angle)
-        for i in range(self.num_tris):
-            longLen = max(self.triLengths[i], 1) #avoid div by 0
-            half_width = math.tan(math.radians(self.triAngle[i])) * self.triLengths[i] 
-            triTheta = math.tanh(half_width/longLen) 
-            self.Tris[i].x = self.shape.x
-            self.Tris[i].y = self.shape.y 
-            self.Tris[i].x2 = self.shape.x +math.cos(car_angle + triTheta)*longLen
-            self.Tris[i].y2 = self.shape.y + math.sin(car_angle + triTheta)*longLen
-            self.Tris[i].x3 = self.shape.x + math.cos(car_angle - triTheta)*longLen
-            self.Tris[i].y3 = self.shape.y + math.sin(car_angle - triTheta)*longLen
-
+                x + math.cos(car_angle + math.radians(angles[i])) * self.maxLen, 
+                y + math.sin(car_angle) + math.radians(angles[i]) * self.maxLen, 
+                thickness=1, color=(255, 0, 0), batch=batch
+                )
+            self.Lines.append(line)
+    
+    def updateLines(self):
+        for i in range(self.num_vision_lines):
+            car_angle = math.radians(self.deg_angle)
+            self.Lines[i].x = self.shape.x
+            self.Lines[i].y = self.shape.y
+            self.Lines[i].x2 = self.shape.x + math.cos(car_angle + math.radians(self.Angles[i])) * self.lineLengths[i]
+            self.Lines[i].y2 = self.shape.y + math.sin(car_angle + math.radians(self.Angles[i])) * self.lineLengths[i]
 
     def is_on_agent(self, object_pos):
         return object_pos in self.shape
-    
-    def is_on_cones(self, x, y):
-        conesIndex = [False]*self.num_tris #replace with cones if works
-        for i in range(self.num_tris):
-            if (x, y) in self.Tris[i]:
-                conesIndex[i] = True
-        return conesIndex
-
+    def line_end_on_agent(self, x2, y2):
+        return self.is_on_agent((x2, y2))
 
     def __deepcopy__(self, renderBatch, renderBatch2):
         # Create a new instance of VehicleAgent
