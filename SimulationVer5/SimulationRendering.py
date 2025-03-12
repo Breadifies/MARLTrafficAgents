@@ -279,6 +279,12 @@ STARTING_EPSILON = 0.5 #0.5
 ACTOR_EPSILON = STARTING_EPSILON
 MIN_EPSILON = 0.05 #0.05
 EPSILON_DECAY = 0.95 #0.99
+#SOFTMAX EXPLORATION
+STARTING_TEMP = 1.0
+ACTOR_TEMP = STARTING_TEMP
+MIN_TEMP = 0.1
+TEMP_DECAY = 0.99
+
 
 num_eps = 1
 ep_len = 0
@@ -291,21 +297,20 @@ ep_reward = 0 #cumulative reward for episode
 runningS_reward = 0
 episodeS_rewards = [] #maintained over every episode (tracking purposes)
 runningS_averages = [] #same but for running_average
-safety_reward = 0
+safety_reward = 0 
 
-#TEMP SHOWCASING REWARD FUNCTION ACTIVATION
+#TEMP SHOWCASING REWARD FUNCTION ACTIVATION PER EPISODE
 efficiency_rewards = []
-safety_rewards = []
+ep_safety_rewards = []
+avg_ep_safety_rewards = []*200
 
-saveModel = False
+saveModel = True
 loadModel = False
+useEpsilonGreedy = True
+useSoftMax = False
 
 
 def calculate_reward(current_state):
-    #global HIT_CHECKPOINT
-    # if HIT_CHECKPOINT:
-    #     reward += 10
-    #     HIT_CHECKPOINT = False
     r1W = 0.5
     r2W = 0.5
     reward1 = 0
@@ -316,8 +321,8 @@ def calculate_reward(current_state):
         r1W = 1
         r2W = 0
     else:
-        r1W = 0.05
-        r2W = 0.95
+        r1W = 0.01
+        r2W = 0.99
         if current_state[4] > 0.5: #implement > 0.2 piece-wise function
             reward2 = current_state[4]**0.2 # x^0.2
         elif current_state[4] > 0.05:
@@ -327,7 +332,7 @@ def calculate_reward(current_state):
         reward2 *= 1  
     #TEMP FOR REWARD SHOWCASE
     efficiency_rewards.append(reward1)
-    safety_rewards.append(reward2)
+    ep_safety_rewards.append(reward2)
     reward1 = r1W*reward1 + r2W*reward2 #linear scalarisation
     print(f"REWARD1: {reward1}, REW2: {reward2}")
     return [reward1, reward2]
@@ -337,6 +342,7 @@ def envReset():
     global ep_reward, running_reward, episode_rewards, running_averages
     global safety_reward, runningS_reward, episodeS_rewards, runningS_averages
     global ACTOR_EPSILON
+    global ACTOR_TEMP
     print("RESET")
     #vAgents = create New agents function ()
     vAgents.clear()
@@ -375,6 +381,10 @@ def envReset():
     #GREEDY EPSILON UPDATE
     print("ACTOR EPSILON: ", ACTOR_EPSILON)
     ACTOR_EPSILON = max(MIN_EPSILON, ACTOR_EPSILON*EPSILON_DECAY)
+
+    #SOFTMAX TEMP UPDATE
+    print("ACTOR TEMP: ", ACTOR_TEMP)
+    ACTOR_TEMP = max(MIN_TEMP, ACTOR_TEMP*TEMP_DECAY)
 
     if num_eps >= MAX_EPS: #MAX_EPS
         print("Completed training... DONE")
@@ -437,7 +447,7 @@ def selectAction(currentState):
 
 def save_model(model):
     torch.save(model.state_dict(), 'saved_models/actor_critic.pth')
-    print("Model saved to 'saved_models/model.pth'")
+    print("Model saved to 'saved_models/actor_critic.pth'")
 
 def load_model(model):
     model_path = 'saved_models/actor_critic.pth'
@@ -496,21 +506,24 @@ eps = np.finfo(np.float32).eps.item() #epsilon, const to add numerical stability
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value']) #store log prob of selected action and state value when action was taken -> used to compute loss for policy and value function (log_prob is used due to stability and policy gradient reasons)
 
 def select_action(state):
-    global num_eps, ACTOR_EPSILON
+    global num_eps, ACTOR_EPSILON, ACTOR_TEMP
     #if num_eps%100 == 0: #periodically reset greedy epsilon
         #ACTOR_EPSILON = 0.5
-    if np.random.rand() < ACTOR_EPSILON: #GREEDY EPSILON EXPLORATION
-        action = np.random.choice([0, 1, 2])
-        #print("RANDOM ACTION TAKEN: ", action)
-        return action
+
+    if useEpsilonGreedy:
+        if np.random.rand() < ACTOR_EPSILON: #GREEDY EPSILON EXPLORATION
+            action = np.random.choice([0, 1, 2])
+            #print("RANDOM ACTION TAKEN: ", action)
+            return action
 
     state = torch.from_numpy(state).float()
     probs, state_value = model(state)
+    if useSoftMax:
+        probs = F.softmax(probs / ACTOR_TEMP, dim=-1) #use softmax for action selection
     #create categorical distr over list of probabilities
-    #print(f"STATEVAL: {state_value}")
+
     m = Categorical(probs)
     action = m.sample() #sampling allows us to select actions based on probabilities
-    #print(f"PROBS : {probs}, ACTION: {action}")
 
     #GRAPHING AGENT POLICY
     actionProbs.append(probs)
@@ -560,6 +573,7 @@ def finish_episode():
 
 def statUpdates():
     episode_label.text = f'Episode: {num_eps}'
+    temp_label.text = f'Temp: {ACTOR_TEMP}'
     update_graph()
 
 #statistics for simulation tracking
@@ -572,6 +586,16 @@ episode_label = pyglet.text.Label(
     anchor_x='right',
     anchor_y='top',
     color=(0, 0, 0, 255)  # Black color
+)
+temp_label = pyglet.text.Label(
+    f'Temp: {ACTOR_TEMP}',
+    font_name='Arial',
+    font_size=14,
+    x=WINDOW_WIDTH - 10,  # Position near the top right corner
+    y=WINDOW_HEIGHT - 30,
+    anchor_x='right',
+    anchor_y='top',
+    color=(255, 0, 0, 255) # Red color
 )
 
 #########################################################################################
@@ -602,7 +626,7 @@ graph_window = pyglet.window.Window(width=800, height=600, caption="Graph Window
 cached_pyglet_image = None
 
 def update_graph():
-    global cached_pyglet_image
+    global cached_pyglet_image, num_eps
     ax1.cla()
     ax2.cla()
     if actionProbs:
@@ -625,10 +649,14 @@ def update_graph():
     width, height = fig.canvas.get_width_height()
     cached_pyglet_image = pyglet.image.ImageData(width, height, 'RGBA', buf, pitch=-4 * width)
 
-    actionProbs.clear()
+    actionProbs.clear() 
     criticValue.clear()
     ax1.set_xlim(left=0)  # Reset the x-axis to start from 0
     ax2.set_xlim(left=0)  # Reset the x-axis to start from 0
+
+    #plotting avg rewards
+    avg_ep_safety_rewards.append(ep_safety_rewards[:200])
+
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4)) 
 
@@ -658,8 +686,9 @@ def on_draw():
 
     # Draw the Simulation
     batch1.draw()
-    #batch2.draw()
+    batch2.draw()
     episode_label.draw()
+    temp_label.draw()
 
 @graph_window.event
 def on_draw():
@@ -683,18 +712,19 @@ pyglet.app.run()
 ####################POST-SIMULATION PLOTTING############################################
 plt.close() #close old plots
 
+output_dir = 'saved_models'
+
+
+
 # Plotting the main data -> OVER EVERY EPOCH
 plt.plot(episode_rewards, label='Reward per Episode', color='b') 
 plt.plot(running_averages, label='Average Reward (Last 50 Episodes)', color='g')
-
 plt.plot(episodeS_rewards, label='EpisodeS Rewards', color='gray', alpha=0.5) 
 plt.plot(runningS_averages, label='RunningS Averages', color='orange', alpha=0.5)  
-
 # Adding labels and title
 plt.xlabel('Episode')
 plt.ylabel('Reward')
 plt.title('Rewards and Average Rewards Over Episodes')
-
 # Adding the hyperparameters as a text box in the plot
 hyperparameters = f"""
 STARTING_EPSILON: {STARTING_EPSILON}
@@ -702,22 +732,19 @@ EPSILON_DECAY: {EPSILON_DECAY}
 OPTIM_LR: {OPTIM_LR}
 GAMMA: {GAMMA}
 """
-
 # Position the text box (adjust the coordinates as needed)
 plt.text(0.96, 0.5, hyperparameters, transform=plt.gca().transAxes,
          fontsize=5, verticalalignment='top', horizontalalignment='right',
          bbox=dict(facecolor='white', alpha=0.4, edgecolor='black', boxstyle='round,pad=0.3'))
 
 plt.legend()
-
 if saveModel: #if saving model then save the plot
-    output_dir = 'saved_models'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     print("Saving plot to 'saved_models/rewards_plot.png'")
     plt.savefig(f'{output_dir}/rewards_plot.png') #save plot as png
-
 plt.show()
+
 
 
 # Plotting totalAP
@@ -734,12 +761,12 @@ ax1.set_xlabel('Step')
 ax1.set_ylabel('Probability')
 ax1.set_title("Action Probability")
 ax1.legend(loc='upper left')
-
-if save_model: #if saving model then save the plot
+if saveModel: #if saving model then save the plot
     print("Saving plot to 'saved_models/actionProbs_plot.png'")
     plt.savefig(f'{output_dir}/actionProbs_plot.png') #save plot as png
-
 plt.show()
+
+
 
 # Plotting totalCV
 losses = torch.stack(totalCV).detach().numpy()
@@ -749,9 +776,25 @@ ax2.set_xlabel('Step')
 ax2.set_ylabel('Loss')
 ax2.set_title("Critic Losses")
 ax2.set_ylim(-2, 2)
-
 if saveModel: #if saving model then save the plot
     print("Saving plot to 'saved_models/totalCV_plot.png'")
     plt.savefig(f'{output_dir}/totalCV_plot.png') #save plot as png
-
 plt.show()
+
+#Plotting avg_safety_rewards_variance
+avg_ep_safety_rewards = np.array(avg_ep_safety_rewards)
+mean_ESR = np.mean(avg_ep_safety_rewards, axis=0)
+std_ESR = np.std(avg_ep_safety_rewards, axis=0)
+timesteps = np.arange(200)
+plt.figure(figsize=(10, 5))
+plt.plot(timesteps, mean_ESR, label='Average Safety Reward', color='b')
+plt.fill_between(timesteps, mean_ESR - std_ESR, mean_ESR + std_ESR, color='b', alpha=0.2, label="Standard Deviation")
+plt.xlabel('Timesteps')
+plt.ylabel('Average Safety Reward')
+plt.title('Average Safety Reward over an Episode')
+plt.legend()
+plt.grid()
+plt.show()
+print(f"AVG_EP: {avg_ep_safety_rewards}")
+print(f"MEAN: {mean_ESR}")
+print(f"stdERROR: {std_ESR}")
