@@ -9,6 +9,7 @@ from torch.nn import functional as F
 import os
 import torch.optim as optim
 from torch.distributions import Categorical
+from torch.distributions.normal import Normal
 from collections import namedtuple
 
 window = pyglet.window.Window(width=800, height=600, vsync=True)
@@ -31,7 +32,7 @@ CAR_WIDTH = MU*1.8
 TOP_SPEED = MU*30#MU*30
 TOP_REV_SPEED = TOP_SPEED/2
 ACCELERATION = MU*70
-DECELERATION = ACCELERATION * 5 #2.5 #braking force is much stronger than accel 
+DECELERATION = ACCELERATION * 1 #2.5 #braking force is much stronger than accel 
 FRICTION = MU*12 #friction coefficient
 
 SPEED_UP = 1 #speed up simulation (do not abouse, accumulate numerical errors, update missing and accuracy of physics)
@@ -103,7 +104,7 @@ initAngle = [0]*len(startPvAgents)
 startPAgents = [
     # PedestrianAgent(x=450, y=400, target_x = 450, target_y = 200, radius=10, color=(0, 0, 100), batch=batch),
     # PedestrianAgent(x=300, y=400, target_x = 300, target_y = 200, radius=10, color=(0, 0, 100), batch=batch)
-    PedestrianAgent(x=400, y=400, target_x = 400, target_y = 200, radius=10, color=(0, 0, 100), batch=batch)
+    PedestrianAgent(x=400, y=350, target_x = 400, target_y = 300, radius=10, color=(0, 0, 100), batch=batch)
 ]
 ###################################################################
 
@@ -125,16 +126,15 @@ for item in startPAgents:
 
 
 
-#HIT_CHECKPOINT = False
 ###############PHYSICS RENDERING###################################
 def update(dt):
     dt = dt * SPEED_UP
     global ACCELERATION, DECELERATION, FRICTION, TOP_SPEED, TOP_REV_SPEED
     for index, p in enumerate(pAgents):
-        # if index == 0:
-        #     p.move(dt*0.2) #move towards target
-        # if index == 1:
-        #     p.move(dt*0.35)
+        if index == 0:
+            p.move(dt*0.5) #move towards target
+        if index == 1:
+            p.move(dt*0.35)
         p.move(dt*0.35)
 
     for a in vAgents:
@@ -216,12 +216,6 @@ def update(dt):
         a.shape.y += a.velocity * dt * math.sin(car_angle)
         a.shape.rotation = -a.deg_angle
 
-
-        # for road in roads:
-        #     if road.passed_checkpoint(a.shape.position):
-        #         print("PASSED CHECKPOINT")
-        #         HIT_CHECKPOINT = True
-
         if abs(a.velocity) < 0.1: #clamp minimum speed
             a.velocity = 0
         if a.velocity >= 0:
@@ -270,15 +264,32 @@ def update(dt):
 
 
 
+
+
+
+
 ###################EPISODE-RENDER####################################################
 UPDATE_FREQUENCY = (1/60) #HOW OFTEN AGENT UPDATES ITS STATE AND ACTION #0.05
 MAX_EP_LENGTH = 3.5/UPDATE_FREQUENCY  
 MAX_EPS = 1000 #run how many eps.
 #GREEDY EXPLORATION
-STARTING_EPSILON = 0.05 #0.5
+STARTING_EPSILON = 0.5 #0.5
 ACTOR_EPSILON = STARTING_EPSILON
-MIN_EPSILON = 0.05 #0.05
+MIN_EPSILON = 0.01 #0.05
 EPSILON_DECAY = 0.95 #0.99
+#DYNAMIC DECAY
+DSTART_EPSILON = 1
+DANGER_EPSILON = DSTART_EPSILON
+D_MIN_EPSILON = 0.1
+D_EPSILON_DECAY = 0.9995
+
+
+#SOFTMAX EXPLORATION
+STARTING_TEMP = 1.0
+ACTOR_TEMP = STARTING_TEMP
+MIN_TEMP = 0.01
+TEMP_DECAY = 0.95
+
 
 num_eps = 1
 ep_len = 0
@@ -291,52 +302,61 @@ ep_reward = 0 #cumulative reward for episode
 runningS_reward = 0
 episodeS_rewards = [] #maintained over every episode (tracking purposes)
 runningS_averages = [] #same but for running_average
-safety_reward = 0
+safety_reward = 0 
 
-#TEMP SHOWCASING REWARD FUNCTION ACTIVATION
+
+#TEMP SHOWCASING REWARD FUNCTION ACTIVATION PER EPISODE
 efficiency_rewards = []
-safety_rewards = []
+ep_safety_rewards = []
+avg_ep_safety_rewards = []*200
 
-saveModel = False
-loadModel = True
+saveModel = True
+loadModel = False
+useEpsilonGreedy = True
+useSoftMax = False
+
+
 
 
 def calculate_reward(current_state):
-    #global HIT_CHECKPOINT
-    # if HIT_CHECKPOINT:
-    #     reward += 10
-    #     HIT_CHECKPOINT = False
+    inDanger = False
     r1W = 0.5
     r2W = 0.5
     reward1 = 0
     reward1 += current_state[3]
     reward2 = 0
     reward2 += current_state[4]
-    if reward2 == 1:#if no obstacles in vision
+    if reward2 >= 1:#if no obstacles in vision
         r1W = 1
         r2W = 0
-    else:
-        r1W = 0.05
-        r2W = 0.95
+    elif reward2 > 0.5: #implement the piecewise-function
+        r1W = 0.1 #0.01
+        r2W = 0.9 #0.99
         if current_state[4] > 0.5: #implement > 0.2 piece-wise function
             reward2 = current_state[4]**0.2 # x^0.2
         elif current_state[4] > 0.05:
             reward2 = 1.94*current_state[4] - 0.1  # 4.8x - 0.24 
         else:   
             reward2 = 0 # 0 < x < 0.05
-        reward2 *= 1  
+    else: #danger zone
+        inDanger = True
+        r1W = 0
+        r2W = 1
+        reward2 = 0 #must get out of danger zone immediately
+    reward2 *= 1  
     #TEMP FOR REWARD SHOWCASE
     efficiency_rewards.append(reward1)
-    safety_rewards.append(reward2)
-    reward1 = r1W*reward1 + r2W*reward2 #linear scalarisation
-    print(f"REWARD1: {reward1}, REW2: {reward2}")
-    return [reward1, reward2]
+    ep_safety_rewards.append(reward2)
+    utility = r1W*reward1 + r2W*reward2 #linear scalarisation
+    #print(f"REWARD1: {reward1}, REW2: {reward2}")
+    return [utility, reward2, inDanger]
 
 def envReset():
     global vAgents, pAgents, ep_len, initVel, roads, num_eps
     global ep_reward, running_reward, episode_rewards, running_averages
     global safety_reward, runningS_reward, episodeS_rewards, runningS_averages
     global ACTOR_EPSILON
+    global ACTOR_TEMP
     print("RESET")
     #vAgents = create New agents function ()
     vAgents.clear()
@@ -349,6 +369,7 @@ def envReset():
         a.velocity = initVel[i]
         a.shape.rotation = initAngle[i]
     ep_len = 0
+
 
 
     #update cumulative reward
@@ -364,6 +385,8 @@ def envReset():
     #performing backpropagation
     finish_episode()
 
+
+
     num_eps += 1
     #LOGGING
     print("Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}".format(num_eps, ep_reward, running_reward))
@@ -375,6 +398,10 @@ def envReset():
     #GREEDY EPSILON UPDATE
     print("ACTOR EPSILON: ", ACTOR_EPSILON)
     ACTOR_EPSILON = max(MIN_EPSILON, ACTOR_EPSILON*EPSILON_DECAY)
+
+    #SOFTMAX TEMP UPDATE
+    print("ACTOR TEMP: ", ACTOR_TEMP)
+    ACTOR_TEMP = max(MIN_TEMP, ACTOR_TEMP*TEMP_DECAY)
 
     if num_eps >= MAX_EPS: #MAX_EPS
         print("Completed training... DONE")
@@ -414,13 +441,20 @@ def envStep(dt):
         else:
             nomVelocity = (currentState[3]/TOP_REV_SPEED)/2 + 0.5
         nomCState = [currentState[0]/WINDOW_WIDTH, currentState[1]/WINDOW_HEIGHT, currentState[2]/360, nomVelocity, currentState[4]/(a.maxLenTri)]
-        #print(f"NORM STATE {nomCState}")
-        current_reward, dist_reward = calculate_reward(nomCState)
+        current_reward, dist_reward, inDanger = calculate_reward(nomCState)
+        if inDanger:
+            a.shape.color = (255, 0, 0)
+        else:
+            a.shape.color = (200, 225, 90)
         a.updateDirection(selectAction(nomCState))
+
+
     #cross reference to MAIN from actor_critic.py
     model.rewards.append(current_reward)
     ep_reward += current_reward
     safety_reward += dist_reward
+
+
 
     if ep_len >= MAX_EP_LENGTH: #if exceeds max length or last part of road passed
         envReset()
@@ -428,7 +462,6 @@ def envStep(dt):
 def selectAction(currentState):
     currentState = np.array(currentState)
     action = select_action(currentState) #A-C func
-    #print(f"ACTION: {action}")
     #action = 2 #forwards automatically
     return action #forwards
 #####################################################################################
@@ -437,7 +470,7 @@ def selectAction(currentState):
 
 def save_model(model):
     torch.save(model.state_dict(), 'saved_models/actor_critic.pth')
-    print("Model saved to 'saved_models/model.pth'")
+    print("Model saved to 'saved_models/actor_critic.pth'")
 
 def load_model(model):
     model_path = 'saved_models/actor_critic.pth'
@@ -457,13 +490,15 @@ def load_model(model):
 INPUTS = 5 #number of state inputs (x, y, angle, velocity, visionLength)
 
 OPTIM_LR = 0.006 #optimiser learning rate # 0.006
-GAMMA = 0.95 #discount factor for future rewards #0.95
+GAMMA = 0.98 #discount factor for future rewards #0.99
 
 #GRAPHING AGENT POLICY
 actionProbs = []
 totalAP = []
 criticValue = []
 totalCV = []
+
+
 
 #ONE DNN for both actor and critic
 class ActorCritic(nn.Module):
@@ -495,22 +530,34 @@ eps = np.finfo(np.float32).eps.item() #epsilon, const to add numerical stability
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value']) #store log prob of selected action and state value when action was taken -> used to compute loss for policy and value function (log_prob is used due to stability and policy gradient reasons)
 
+
+
+
 def select_action(state):
-    global num_eps, ACTOR_EPSILON
-    #if num_eps%100 == 0: #periodically reset greedy epsilon
-        #ACTOR_EPSILON = 0.5
-    if np.random.rand() < ACTOR_EPSILON: #GREEDY EPSILON EXPLORATION
-        action = np.random.choice([0, 1, 2])
-        #print("RANDOM ACTION TAKEN: ", action)
-        return action
+    global num_eps, ACTOR_EPSILON, ACTOR_TEMP, DANGER_EPSILON, D_MIN_EPSILON, D_EPSILON_DECAY
+
+    if state[4] < 0.5: #in danger zone
+        print("DANGER_EPSILON: ", DANGER_EPSILON)
+        if np.random.rand() < DANGER_EPSILON:
+            DANGER_EPSILON = max(D_MIN_EPSILON, DANGER_EPSILON*D_EPSILON_DECAY) #decay this over time as well
+            action = 1 #guide the agent to go backwards/coast
+            return action
+             
+
+    if useEpsilonGreedy:
+        if np.random.rand() < ACTOR_EPSILON: #GREEDY EPSILON EXPLORATION
+            action = np.random.choice([0, 1, 2])
+            return action
 
     state = torch.from_numpy(state).float()
     probs, state_value = model(state)
+
+    if useSoftMax:
+        probs = F.softmax(probs / ACTOR_TEMP, dim=-1) #use softmax for action selection
     #create categorical distr over list of probabilities
-    #print(f"STATEVAL: {state_value}")
+
     m = Categorical(probs)
     action = m.sample() #sampling allows us to select actions based on probabilities
-    #print(f"PROBS : {probs}, ACTION: {action}")
 
     #GRAPHING AGENT POLICY
     actionProbs.append(probs)
@@ -519,8 +566,11 @@ def select_action(state):
     totalCV.append(state_value)
 
     #save action to action buffer
-    model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+    model.saved_actions.append(SavedAction(m.log_prob(action), state_value)) #store the entropy of the probability distribution -> tells us the "uncertainty" of policy at that decision
     return action.item() #forwards or backwards
+
+
+
 
 def finish_episode():
     #code for training network -> calculate loss for actor and critic and then backpropagate
@@ -535,17 +585,19 @@ def finish_episode():
         returns.insert(0, R)
     returns = torch.tensor(returns)
     returns = (returns - returns.mean()) / (returns.std() + eps) #normalization of returns tensor -> to calculate advantage and help ensure consistent updates
+    
+
     for (log_prob, value), R in zip(saved_actions, returns):
         advantage = R - value.item() #advantage calculated as actual return (R) - critic's estimated value (value.item())
-        policy_losses.append(-log_prob * advantage) #actor loss (gradient ascent)
+        policy_losses.append(-log_prob * advantage)  #actor loss (gradient ascent)
         value_losses.append(F.smooth_l1_loss(value, torch.tensor([R]))) #critic loss via L1 smooth loss (Huber loss)
-        #criticValue.append(value_losses)
     optimizer.zero_grad() #reset gradients
     #TD learning, so sum up all policy and value losses calculated
     loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
     #perform backpropagation
     loss.backward()
     optimizer.step()
+
     #reset buffers for next ep
     del model.rewards[:]
     del model.saved_actions[:]
@@ -559,6 +611,7 @@ def finish_episode():
 
 def statUpdates():
     episode_label.text = f'Episode: {num_eps}'
+    temp_label.text = f'Temp: {ACTOR_TEMP}'
     update_graph()
 
 #statistics for simulation tracking
@@ -571,6 +624,16 @@ episode_label = pyglet.text.Label(
     anchor_x='right',
     anchor_y='top',
     color=(0, 0, 0, 255)  # Black color
+)
+temp_label = pyglet.text.Label(
+    f'Temp: {ACTOR_TEMP}',
+    font_name='Arial',
+    font_size=14,
+    x=WINDOW_WIDTH - 10,  # Position near the top right corner
+    y=WINDOW_HEIGHT - 30,
+    anchor_x='right',
+    anchor_y='top',
+    color=(255, 0, 0, 255) # Red color
 )
 
 #########################################################################################
@@ -601,7 +664,7 @@ graph_window = pyglet.window.Window(width=800, height=600, caption="Graph Window
 cached_pyglet_image = None
 
 def update_graph():
-    global cached_pyglet_image
+    global cached_pyglet_image, num_eps
     ax1.cla()
     ax2.cla()
     if actionProbs:
@@ -624,10 +687,14 @@ def update_graph():
     width, height = fig.canvas.get_width_height()
     cached_pyglet_image = pyglet.image.ImageData(width, height, 'RGBA', buf, pitch=-4 * width)
 
-    actionProbs.clear()
+    actionProbs.clear() 
     criticValue.clear()
     ax1.set_xlim(left=0)  # Reset the x-axis to start from 0
     ax2.set_xlim(left=0)  # Reset the x-axis to start from 0
+
+    #plotting avg rewards
+    avg_ep_safety_rewards.append(ep_safety_rewards[:200])
+
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4)) 
 
@@ -659,6 +726,7 @@ def on_draw():
     batch1.draw()
     batch2.draw()
     episode_label.draw()
+    temp_label.draw()
 
 @graph_window.event
 def on_draw():
@@ -682,18 +750,19 @@ pyglet.app.run()
 ####################POST-SIMULATION PLOTTING############################################
 plt.close() #close old plots
 
+output_dir = 'saved_models'
+
+
+
 # Plotting the main data -> OVER EVERY EPOCH
 plt.plot(episode_rewards, label='Reward per Episode', color='b') 
 plt.plot(running_averages, label='Average Reward (Last 50 Episodes)', color='g')
-
 plt.plot(episodeS_rewards, label='EpisodeS Rewards', color='gray', alpha=0.5) 
 plt.plot(runningS_averages, label='RunningS Averages', color='orange', alpha=0.5)  
-
 # Adding labels and title
 plt.xlabel('Episode')
 plt.ylabel('Reward')
 plt.title('Rewards and Average Rewards Over Episodes')
-
 # Adding the hyperparameters as a text box in the plot
 hyperparameters = f"""
 STARTING_EPSILON: {STARTING_EPSILON}
@@ -701,22 +770,19 @@ EPSILON_DECAY: {EPSILON_DECAY}
 OPTIM_LR: {OPTIM_LR}
 GAMMA: {GAMMA}
 """
-
 # Position the text box (adjust the coordinates as needed)
 plt.text(0.96, 0.5, hyperparameters, transform=plt.gca().transAxes,
          fontsize=5, verticalalignment='top', horizontalalignment='right',
          bbox=dict(facecolor='white', alpha=0.4, edgecolor='black', boxstyle='round,pad=0.3'))
 
 plt.legend()
-
 if saveModel: #if saving model then save the plot
-    output_dir = 'saved_models'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     print("Saving plot to 'saved_models/rewards_plot.png'")
     plt.savefig(f'{output_dir}/rewards_plot.png') #save plot as png
-
 plt.show()
+
 
 
 # Plotting totalAP
@@ -733,15 +799,12 @@ ax1.set_xlabel('Step')
 ax1.set_ylabel('Probability')
 ax1.set_title("Action Probability")
 ax1.legend(loc='upper left')
-
-if save_model: #if saving model then save the plot
-    output_dir = 'saved_models'
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+if saveModel: #if saving model then save the plot
     print("Saving plot to 'saved_models/actionProbs_plot.png'")
     plt.savefig(f'{output_dir}/actionProbs_plot.png') #save plot as png
-
 plt.show()
+
+
 
 # Plotting totalCV
 losses = torch.stack(totalCV).detach().numpy()
@@ -751,12 +814,25 @@ ax2.set_xlabel('Step')
 ax2.set_ylabel('Loss')
 ax2.set_title("Critic Losses")
 ax2.set_ylim(-2, 2)
-
 if saveModel: #if saving model then save the plot
-    output_dir = 'saved_models'
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
     print("Saving plot to 'saved_models/totalCV_plot.png'")
     plt.savefig(f'{output_dir}/totalCV_plot.png') #save plot as png
-
 plt.show()
+
+#Plotting avg_safety_rewards_variance
+avg_ep_safety_rewards = np.array(avg_ep_safety_rewards)
+mean_ESR = np.mean(avg_ep_safety_rewards, axis=0)
+std_ESR = np.std(avg_ep_safety_rewards, axis=0)
+timesteps = np.arange(200)
+plt.figure(figsize=(10, 5))
+plt.plot(timesteps, mean_ESR, label='Average Safety Reward', color='b')
+plt.fill_between(timesteps, mean_ESR - std_ESR, mean_ESR + std_ESR, color='b', alpha=0.2, label="Standard Deviation")
+plt.xlabel('Timesteps')
+plt.ylabel('Average Safety Reward')
+plt.title('Average Safety Reward over an Episode')
+plt.legend()
+plt.grid()
+plt.show()
+print(f"AVG_EP: {avg_ep_safety_rewards}")
+print(f"MEAN: {mean_ESR}")
+print(f"stdERROR: {std_ESR}")

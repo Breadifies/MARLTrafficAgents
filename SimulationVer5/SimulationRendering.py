@@ -306,8 +306,8 @@ avg_ep_safety_rewards = []*200
 
 saveModel = True
 loadModel = False
-useEpsilonGreedy = True
-useSoftMax = False
+useEpsilonGreedy = False
+useSoftMax = True
 
 
 def calculate_reward(current_state):
